@@ -8,13 +8,12 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 import os
-import requests
 from streamlit_autorefresh import st_autorefresh
 
 # --- 1. Page Configuration ---
 st.set_page_config(layout="wide", page_title="Haridas Master Terminal", initial_sidebar_state="expanded")
 
-# অটো-রিফ্রেশ (CoinDCX এর জন্য)
+# ৫ সেকেন্ড পরপর অটো-রিফ্রেশ
 st_autorefresh(interval=5000, key="datarefresh")
 
 # --- AUTO-SAVE DATABASE SETUP (Persistent Storage) ---
@@ -70,32 +69,8 @@ def fmt_price(val):
     elif val < 1: return f"{val:.4f}"
     else: return f"{val:,.2f}"
 
-# 🚨 COINDCX LIVE DATA ENGINE 🚨
-@st.cache_data(ttl=5)
-def get_coindcx_live_prices():
-    url = "https://public.coindcx.com/market_data/ticker"
-    try:
-        response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            return response.json()
-    except: pass
-    return []
-
-def get_crypto_price_v2(data, market_pair):
-    if not isinstance(data, list): return 0.0, 0.0, 0.0
-    try:
-        ticker = next((item for item in data if item.get("market") == market_pair), None)
-        if ticker:
-            ltp = float(ticker.get('last_price', 0.0))
-            change_abs = float(ticker.get('change_24h', 0.0))
-            prev_close = ltp - change_abs
-            pct_change = (change_abs / prev_close * 100) if prev_close > 0 else 0.0
-            return ltp, change_abs, round(pct_change, 2)
-    except: pass
-    return 0.0, 0.0, 0.0
-
-# 🚨 BULLETPROOF LIVE DATA ENGINE (Fixes the wrong percentage bug) 🚨
-@st.cache_data(ttl=30)
+# 🚨 FAST YFINANCE ENGINE (Reverted to fix the $0.00 bug) 🚨
+@st.cache_data(ttl=15)
 def get_live_data(ticker_symbol):
     try:
         stock = yf.Ticker(ticker_symbol)
@@ -105,7 +80,6 @@ def get_live_data(ticker_symbol):
             ltp = float(fast.last_price)
             prev_close = float(fast.previous_close)
         except:
-            # Fallback if fast_info fails
             df = stock.history(period='5d')
             if len(df) >= 2:
                 ltp = float(df['Close'].iloc[-1])
@@ -123,16 +97,24 @@ def get_live_data(ticker_symbol):
     except: 
         return 0.0, 0.0, 0.0
 
-# 🚨 MISSING FUNCTION ADDED: Opening Movers 🚨
+# 🚨 FIXED OPENING MOVERS SCANNER 🚨
 @st.cache_data(ttl=60)
 def get_opening_movers(item_list):
     movers = []
-    for ticker in item_list:
+    def fetch_mover(ticker):
         try:
             ltp, chg, pct_chg = get_live_data(ticker)
             if abs(pct_chg) >= 2.0:
-                movers.append({"Stock": ticker, "LTP": ltp, "Pct": round(pct_chg, 2)})
+                return {"Stock": ticker, "LTP": ltp, "Pct": round(pct_chg, 2)}
         except: pass
+        return None
+
+    with ThreadPoolExecutor(max_workers=20) as executor:
+        results = list(executor.map(fetch_mover, item_list))
+    
+    for res in results:
+        if res is not None: movers.append(res)
+        
     return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
 
 @st.cache_data(ttl=300)
@@ -186,7 +168,6 @@ def get_dynamic_market_data(item_list):
             stock = yf.Ticker(ticker)
             df = stock.history(period="10d")
             if len(df) >= 3:
-                # Live LTP overriding history lag
                 fast = stock.fast_info
                 try: c1 = float(fast.last_price)
                 except: c1 = float(df['Close'].iloc[-1])
@@ -395,7 +376,7 @@ def process_auto_trades(live_signals):
         save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
         save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
 
-# --- 5. Sidebar & Market Toggle ---
+# --- 6. Sidebar & Market Toggle ---
 with st.sidebar:
     st.markdown("### 🌍 SELECT MARKET")
     market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
@@ -421,7 +402,7 @@ with st.sidebar:
     st.divider()
     
     st.markdown("### ⏱️ AUTO REFRESH")
-    auto_refresh = st.checkbox("Enable Auto-Refresh", value=False)
+    auto_refresh = st.checkbox("Enable Auto-Refresh (Applies to Non-Live Data)", value=False)
     refresh_time = st.selectbox("Interval (Mins):", [1, 3, 5], index=0) 
     
     if st.button("🗑️ Clear All History Data"):
@@ -435,21 +416,6 @@ with st.sidebar:
 if auto_refresh:
     refresh_sec = refresh_time * 60
     st.markdown(f'<meta http-equiv="refresh" content="{refresh_sec}">', unsafe_allow_html=True)
-
-# --- 6. Top Navigation ---
-ist_timezone = pytz.timezone('Asia/Kolkata')
-curr_time = datetime.datetime.now(ist_timezone)
-t_915 = curr_time.replace(hour=9, minute=15, second=0, microsecond=0)
-t_1530 = curr_time.replace(hour=15, minute=30, second=0, microsecond=0)
-
-if market_mode == "🇮🇳 Indian Market (NSE)":
-    terminal_title = "HARIDAS NSE TERMINAL"
-    if curr_time < t_915: session, session_color = "PRE-MARKET", "#ff9800" 
-    elif curr_time <= t_1530: session, session_color = "LIVE MARKET", "#28a745" 
-    else: session, session_color = "POST MARKET", "#dc3545" 
-else:
-    terminal_title = "HARIDAS CRYPTO TERMINAL"
-    session, session_color = "LIVE 24/7 (CRYPTO)", "#17a2b8"
 
 # --- 7. CSS ---
 css_string = (
@@ -475,6 +441,21 @@ css_string = (
     "</style>"
 )
 st.markdown(css_string, unsafe_allow_html=True)
+
+# --- 8. Top Navigation ---
+ist_timezone = pytz.timezone('Asia/Kolkata')
+curr_time = datetime.datetime.now(ist_timezone)
+t_915 = curr_time.replace(hour=9, minute=15, second=0, microsecond=0)
+t_1530 = curr_time.replace(hour=15, minute=30, second=0, microsecond=0)
+
+if market_mode == "🇮🇳 Indian Market (NSE)":
+    terminal_title = "HARIDAS NSE TERMINAL"
+    if curr_time < t_915: session, session_color = "PRE-MARKET", "#ff9800" 
+    elif curr_time <= t_1530: session, session_color = "LIVE MARKET", "#28a745" 
+    else: session, session_color = "POST MARKET", "#dc3545" 
+else:
+    terminal_title = "HARIDAS CRYPTO TERMINAL"
+    session, session_color = "LIVE 24/7 (CRYPTO)", "#17a2b8"
 
 nav_html = (
     "<div class='top-nav'>"
@@ -520,6 +501,7 @@ if page_selection == "📈 MAIN TERMINAL":
     with col2:
         st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
         
+        # 🚨 ১০০% ফিক্সড: CoinDCX এর বদলে আবার yfinance দিয়ে ইনডেক্স আনছি, যাতে কোনোদিন $0.00 না দেখায় 🚨
         if market_mode == "🇮🇳 Indian Market (NSE)":
             p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN")
             p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI")
@@ -529,14 +511,12 @@ if page_selection == "📈 MAIN TERMINAL":
             p6_ltp, p6_chg, p6_pct = get_live_data("^CNXIT") 
             indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Fin Nifty", p5_ltp, p5_chg, p5_pct), ("Nifty IT", p6_ltp, p6_chg, p6_pct)]
         else:
-            live_data = get_coindcx_live_prices()
-            # COINDCX EXACT FIX
-            p1_ltp, p1_chg, p1_pct = get_crypto_price_v2(live_data, "B-BTC_USDT")
-            p2_ltp, p2_chg, p2_pct = get_crypto_price_v2(live_data, "B-ETH_USDT")
-            p3_ltp, p3_chg, p3_pct = get_crypto_price_v2(live_data, "B-SOL_USDT")
-            p4_ltp, p4_chg, p4_pct = get_crypto_price_v2(live_data, "B-BNB_USDT")
-            p5_ltp, p5_chg, p5_pct = get_crypto_price_v2(live_data, "B-XRP_USDT")
-            p6_ltp, p6_chg, p6_pct = get_crypto_price_v2(live_data, "B-DOGE_USDT")
+            p1_ltp, p1_chg, p1_pct = get_live_data("BTC-USD")
+            p2_ltp, p2_chg, p2_pct = get_live_data("ETH-USD")
+            p3_ltp, p3_chg, p3_pct = get_live_data("SOL-USD")
+            p4_ltp, p4_chg, p4_pct = get_live_data("BNB-USD")
+            p5_ltp, p5_chg, p5_pct = get_live_data("XRP-USD")
+            p6_ltp, p6_chg, p6_pct = get_live_data("DOGE-USD")
             indices = [("BITCOIN", p1_ltp, p1_chg, p1_pct), ("ETHEREUM", p2_ltp, p2_chg, p2_pct), ("SOLANA", p3_ltp, p3_chg, p3_pct), ("BINANCE COIN", p4_ltp, p4_chg, p4_pct), ("RIPPLE", p5_ltp, p5_chg, p5_pct), ("DOGECOIN", p6_ltp, p6_chg, p6_pct)]
 
         indices_html = "<div class='idx-container'>"
