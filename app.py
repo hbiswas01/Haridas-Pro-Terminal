@@ -13,8 +13,6 @@ from streamlit_autorefresh import st_autorefresh
 
 # --- 1. Page Configuration ---
 st.set_page_config(layout="wide", page_title="Haridas Master Terminal", initial_sidebar_state="expanded")
-
-# ৫ সেকেন্ড পরপর অটো-রিফ্রেশ
 st_autorefresh(interval=5000, key="datarefresh")
 
 # --- AUTO-SAVE DATABASE SETUP ---
@@ -35,7 +33,7 @@ if 'active_trades' not in st.session_state:
 if 'trade_history' not in st.session_state:
     st.session_state.trade_history = load_data(HISTORY_TRADES_FILE)
 
-# --- 2. AUTHENTICATED COINDCX API ENGINE (100% WORKING) ---
+# --- 2. AUTHENTICATED COINDCX API ENGINE ---
 @st.cache_data(ttl=5)
 def get_coindcx_live_prices():
     url = "https://api.coindcx.com/exchange/ticker"
@@ -43,11 +41,9 @@ def get_coindcx_live_prices():
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'application/json'
     }
-    
     try:
         api_key = st.secrets.get("COINDCX_API_KEY", "")
-        if api_key:
-            headers['X-AUTH-APIKEY'] = api_key
+        if api_key: headers['X-AUTH-APIKEY'] = api_key
     except: pass
 
     try:
@@ -59,10 +55,7 @@ def get_coindcx_live_prices():
 
 def get_crypto_price_v2(data, coin_prefix):
     if not isinstance(data, list) or len(data) == 0: return 0.0, 0.0, 0.0
-    
-    # STRICT USDT SEARCH: শুধুমাত্র ডলারের (USDT) দাম খুঁজবে, INR নয়
     target_markets = [f"B-{coin_prefix}_USDT", f"{coin_prefix}USDT", f"{coin_prefix}_USDT"]
-    
     for tm in target_markets:
         for item in data:
             if item.get("market") == tm:
@@ -74,21 +67,32 @@ def get_crypto_price_v2(data, coin_prefix):
                 except: pass
     return 0.0, 0.0, 0.0
 
-# --- 3. Live Market Data Dictionary ---
+# --- 3. 🚨 RESTORED FULL MARKET DATA DICTIONARY 🚨 ---
 FNO_SECTORS = {
-    "MIXED WATCHLIST": ["HINDALCO.NS", "NTPC.NS", "WIPRO.NS", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "ITC.NS", "SBIN.NS"],
+    "MIXED WATCHLIST": ["HINDALCO.NS", "NTPC.NS", "WIPRO.NS", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS"],
+    "NIFTY METAL": ["HINDALCO.NS", "TATASTEEL.NS", "VEDL.NS", "JSWSTEEL.NS", "NMDC.NS", "COALINDIA.NS"],
     "NIFTY BANK": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "INDUSINDBK.NS"],
-    "NIFTY IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS"],
-    "NIFTY AUTO": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS"]
+    "NIFTY IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS"],
+    "NIFTY ENERGY": ["RELIANCE.NS", "NTPC.NS", "ONGC.NS", "POWERGRID.NS", "TATAPOWER.NS"],
+    "NIFTY AUTO": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS"],
+    "NIFTY PHARMA": ["SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS"],
+    "NIFTY FMCG": ["ITC.NS", "HUL.NS", "NESTLEIND.NS", "BRITANNIA.NS"],
+    "NIFTY INFRA": ["LT.NS", "LICI.NS", "ULTRACEMCO.NS"],
+    "NIFTY REALTY": ["DLF.NS", "GODREJPROP.NS", "MACROTECH.NS"],
+    "NIFTY PSU BANK": ["SBIN.NS", "PNB.NS", "BOB.NS", "CANBK.NS"]
 }
 
-NIFTY_50 = ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "ICICIBANK.NS", "INFY.NS", "SBIN.NS", "BHARTIARTL.NS", "ITC.NS", "LT.NS"]
-ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50))
+NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", "LTIM.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "UPL.NS", "WIPRO.NS"]
+NIFTY_NEXT_50 = ["ABB.NS", "ADANIENSOL.NS", "ADANIGREEN.NS", "AMBUJACEM.NS", "DMART.NS", "BAJAJHLDNG.NS", "BANKBARODA.NS", "BEL.NS", "BOSCHLTD.NS", "CANBK.NS", "CHOLAFIN.NS", "CGPOWER.NS", "COLPAL.NS", "DLF.NS", "DABUR.NS", "GAIL.NS", "GODREJCP.NS", "HAL.NS", "HAVELLS.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "ICICIGI.NS", "ICICIPRULI.NS", "IDBI.NS", "INDIGO.NS", "IOC.NS", "IRFC.NS", "JINDALSTEL.NS", "JIOFIN.NS", "LODHA.NS", "MARICO.NS", "MUTHOOTFIN.NS", "NAUKRI.NS", "PIDILITIND.NS", "PFC.NS", "PNB.NS", "RECLTD.NS", "SRF.NS", "MOTHERSON.NS", "SHREECEM.NS", "SIEMENS.NS", "TVSMOTOR.NS", "TORNTPHARM.NS", "TRENT.NS", "UBL.NS", "MCDOWELL-N.NS", "VBL.NS", "VEDL.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"]
+ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50 + NIFTY_NEXT_50))
 
 CRYPTO_SECTORS = {
-    "ALL COINDCX FUTURES": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD"],
+    "ALL COINDCX FUTURES": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD", "TRX-USD", "MATIC-USD", "AGLD-USD", "BEL-USD", "SNX-USD", "AAVE-USD", "UNI-USD", "NEAR-USD", "APT-USD", "LDO-USD", "CRV-USD", "MKR-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD", "LTC-USD", "BCH-USD", "XLM-USD", "ATOM-USD", "HBAR-USD", "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD", "VET-USD", "THETA-USD", "SAND-USD", "MANA-USD", "AXS-USD", "APE-USD", "GALA-USD", "FTM-USD", "DYDX-USD", "SUI-USD", "SEI-USD", "TIA-USD", "ORDI-USD", "FET-USD", "RUNE-USD", "AR-USD", "COMP-USD", "CHZ-USD", "EGLD-USD", "ALGO-USD", "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD"],
     "TOP WATCHLIST": ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD"],
-    "MEME COINS": ["DOGE-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD"]
+    "LAYER 1": ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "NEAR-USD"],
+    "MEME COINS": ["DOGE-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD"],
+    "DEFI & WEB3": ["LINK-USD", "UNI-USD", "AAVE-USD", "CRV-USD", "MKR-USD", "LDO-USD", "AGLD-USD", "BEL-USD"],
+    "ALTCOINS": ["XRP-USD", "TRX-USD", "MATIC-USD", "LTC-USD", "BCH-USD", "XLM-USD", "APT-USD", "SNX-USD"]
 }
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist]))
 
@@ -98,7 +102,7 @@ def fmt_price(val):
     elif val < 1: return f"{val:.4f}"
     else: return f"{val:,.2f}"
 
-# --- 4. DATA ENGINES ---
+# --- 4. DATA ENGINES (WITH THREADING) ---
 @st.cache_data(ttl=15)
 def get_live_data(ticker_symbol):
     try:
@@ -125,7 +129,7 @@ def get_opening_movers(item_list):
         except: pass
         return None
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=30) as executor:
         results = list(executor.map(fetch_mover, item_list))
     for res in results:
         if res is not None: movers.append(res)
@@ -154,7 +158,7 @@ def get_adv_dec(item_list):
     def fetch_chg(ticker):
         _, change, _ = get_live_data(ticker)
         return change
-    with ThreadPoolExecutor(max_workers=30) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         results = list(executor.map(fetch_chg, item_list))
     for change in results:
         if change > 0: adv += 1
@@ -179,7 +183,7 @@ def get_dynamic_market_data(item_list):
         except: pass
         return None
 
-    with ThreadPoolExecutor(max_workers=30) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         results = list(executor.map(fetch_dynamic, item_list))
         
     for res in results:
@@ -194,7 +198,7 @@ def get_dynamic_market_data(item_list):
 @st.cache_data(ttl=60)
 def get_oi_simulation(item_list):
     setups = []
-    for ticker in item_list:
+    def scan_oi(ticker):
         try:
             df = yf.Ticker(ticker).history(period="2d", interval="15m")
             if len(df) >= 3:
@@ -203,12 +207,16 @@ def get_oi_simulation(item_list):
                 c3 = df['Close'].iloc[-3]
                 if v1 > (v2 * 1.5):
                     oi_status = "🔥 High (Spike)"
-                    if c1 > c2:
-                        signal, color = ("Short Covering 🚀" if c2 < c3 else "Long Buildup 📈"), "green"
-                    else:
-                        signal, color = ("Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉"), "red"
-                    setups.append({"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color})
+                    if c1 > c2: signal, color = ("Short Covering 🚀" if c2 < c3 else "Long Buildup 📈"), "green"
+                    else: signal, color = ("Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉"), "red"
+                    return {"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color}
         except: pass
+        return None
+        
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(scan_oi, item_list))
+    for res in results:
+        if res: setups.append(res)
     return setups
 
 @st.cache_data(ttl=60)
@@ -245,13 +253,12 @@ def nse_ha_bb_strategy_5m(stock_list):
         except: pass
         return None
 
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    with ThreadPoolExecutor(max_workers=30) as executor:
         results = list(executor.map(scan_ha_bb, stock_list))
     for res in results:
         if res: signals.append(res)
     return signals
 
-# 🚨 THE MISSING CRYPTO FUNCTION RESTORED 🚨
 @st.cache_data(ttl=60)
 def crypto_ha_bb_strategy(crypto_list):
     signals = []
@@ -287,13 +294,12 @@ def crypto_ha_bb_strategy(crypto_list):
         except: pass
         return None
 
-    with ThreadPoolExecutor(max_workers=30) as executor:
+    with ThreadPoolExecutor(max_workers=40) as executor:
         results = list(executor.map(scan_coin, crypto_list))
     for res in results:
         if res: signals.append(res)
     return signals
 
-# 🚨 THE MISSING AUTO TRADE FUNCTION RESTORED 🚨
 def process_auto_trades(live_signals):
     ist_timezone = pytz.timezone('Asia/Kolkata')
     current_time_str = datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M")
@@ -404,14 +410,14 @@ if page_selection == "📈 MAIN TERMINAL":
             sec_html += "</table></div>"
             st.markdown(sec_html, unsafe_allow_html=True)
 
-        with st.spinner("Wait..."): gainers, losers, trends = get_dynamic_market_data(all_assets)
+        with st.spinner("Scanning 150+ Assets..."): gainers, losers, trends = get_dynamic_market_data(all_assets)
         st.markdown("<div class='section-title'>🔍 TREND (3+ DAYS)</div>", unsafe_allow_html=True)
         if trends:
             t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
             for t in trends: t_html += f"<tr><td style='text-align:left; font-weight:bold;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
             t_html += "</table></div>"
             st.markdown(t_html, unsafe_allow_html=True)
-        else: st.info("No trend found.")
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No trend found.</p>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
@@ -421,7 +427,6 @@ if page_selection == "📈 MAIN TERMINAL":
             p3_ltp, p3_chg, p3_pct = get_live_data("INR=X")
             indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct)]
         else:
-            # 🚀 COINDCX API IN ACTION 🚀
             live_data = get_coindcx_live_prices()
             btc_ltp, btc_chg, btc_pct = get_crypto_price_v2(live_data, "BTC")
             eth_ltp, eth_chg, eth_pct = get_crypto_price_v2(live_data, "ETH")
@@ -438,7 +443,7 @@ if page_selection == "📈 MAIN TERMINAL":
             sign = "+" if chg >= 0 else ""
             prefix = "₹" if name != "USDINR" and market_mode == "🇮🇳 Indian Market (NSE)" else "$"
             val_str = f"{val:.4f}" if name == "USDINR" else fmt_price(val)
-            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:16px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{fmt_price(chg)} ({sign}{pct:.2f}%)</span></div>"
+            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{fmt_price(chg)} ({sign}{pct:.2f}%)</span></div>"
         indices_html += "</div>"
         st.markdown(indices_html, unsafe_allow_html=True)
 
@@ -449,7 +454,7 @@ if page_selection == "📈 MAIN TERMINAL":
         st.markdown(f"<div class='adv-dec-container'><div class='adv-dec-bar'><div class='bar-green' style='width: {adv_pct}%;'></div><div class='bar-red' style='width: {100-adv_pct}%;'></div></div><div style='display:flex; justify-content:space-between; font-size:12px; font-weight:bold;'><span style='color:green;'>Advances: {adv}</span><span style='color:red;'>Declines: {dec}</span></div></div>", unsafe_allow_html=True)
 
         st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (HA+BB)</div>", unsafe_allow_html=True)
-        with st.spinner("Scanning Charts..."): 
+        with st.spinner("Scanning All Charts..."): 
             live_signals = nse_ha_bb_strategy_5m(current_watchlist) if market_mode == "🇮🇳 Indian Market (NSE)" else crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
         
         if live_signals:
@@ -482,6 +487,12 @@ if page_selection == "📈 MAIN TERMINAL":
                     save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
                     st.success("✅ Trade saved!")
 
+        st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY</div>", unsafe_allow_html=True)
+        if len(st.session_state.trade_history) > 0:
+            df_hist = pd.DataFrame(st.session_state.trade_history)
+            st.dataframe(df_hist, use_container_width=True)
+        else: st.info("No closed trades.")
+
     with col3:
         st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS</div>", unsafe_allow_html=True)
         if gainers:
@@ -489,7 +500,7 @@ if page_selection == "📈 MAIN TERMINAL":
             for g in gainers: g_html += f"<tr><td style='text-align:left; font-weight:bold;'>{g['Stock']}</td><td>{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
             g_html += "</table></div>"
             st.markdown(g_html, unsafe_allow_html=True)
-        else: st.info("No data")
+        else: st.markdown("<p style='text-align:center;'>No live gainers.</p>", unsafe_allow_html=True)
 
         st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS</div>", unsafe_allow_html=True)
         if losers:
@@ -497,12 +508,12 @@ if page_selection == "📈 MAIN TERMINAL":
             for l in losers: l_html += f"<tr><td style='text-align:left; font-weight:bold;'>{l['Stock']}</td><td>{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
             l_html += "</table></div>"
             st.markdown(l_html, unsafe_allow_html=True)
-        else: st.info("No data")
+        else: st.markdown("<p style='text-align:center;'>No live losers.</p>", unsafe_allow_html=True)
 
 # ==================== OTHER SECTIONS ====================
 elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🚀 24H Crypto Movers"]:
     st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
-    with st.spinner("Scanning ALL Assets..."): movers = get_opening_movers(all_assets)
+    with st.spinner("Scanning ALL Assets (Fast Mode)..."): movers = get_opening_movers(all_assets)
     if movers:
         m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock / Coin</th><th>LTP</th><th>Movement %</th></tr>"
         for m in movers: 
