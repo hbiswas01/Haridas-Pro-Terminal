@@ -15,7 +15,6 @@ from streamlit_autorefresh import st_autorefresh
 st.set_page_config(layout="wide", page_title="Haridas Master Terminal", initial_sidebar_state="expanded")
 
 # --- 2. Auto Refresh Setup ---
-# এটি ক্রিপ্টো প্রাইসকে প্রতি ৫ সেকেন্ডে আপডেট করবে
 st_autorefresh(interval=5000, key="datarefresh")
 
 # --- 3. AUTO-SAVE DATABASE SETUP (Persistent Storage) ---
@@ -51,10 +50,16 @@ def get_coindcx_live_prices():
 def get_crypto_price_v2(data, market_pair):
     if not isinstance(data, list): return 0.0, 0.0
     try:
-        # CoinDCX-এ পেয়ারের নাম সাধারণত "BTCUSDT" থাকে
+        # CoinDCX-এ পেয়ারের নাম "B-BTC_USDT" এই ফরম্যাটে থাকে
         ticker = next((item for item in data if item.get("market") == market_pair), None)
         if ticker:
-            return float(ticker.get('last_price', 0.0)), float(ticker.get('change_24h', 0.0))
+            # Change 24h calculation fix
+            ltp = float(ticker.get('last_price', 0.0))
+            change_abs = float(ticker.get('change_24h', 0.0))
+            # CoinDCX change_24h is absolute change, not percentage. Calculating percentage:
+            prev_close = ltp - change_abs
+            pct_change = (change_abs / prev_close * 100) if prev_close > 0 else 0.0
+            return ltp, round(pct_change, 2)
     except: pass
     return 0.0, 0.0
 
@@ -120,6 +125,26 @@ def get_live_data(ticker_symbol):
         return ltp, change, pct_change
     except: 
         return 0.0, 0.0, 0.0
+
+# 🚨 MISSING FUNCTION ADDED: Opening Movers 🚨
+@st.cache_data(ttl=60)
+def get_opening_movers(item_list):
+    movers = []
+    def fetch_mover(ticker):
+        try:
+            _, change, pct_chg = get_live_data(ticker)
+            if abs(pct_chg) >= 2.0: # Filter for 2% or more movement
+                return {"Stock": ticker, "LTP": get_live_data(ticker)[0], "Pct": round(pct_chg, 2)}
+        except: pass
+        return None
+
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(fetch_mover, item_list))
+    
+    for res in results:
+        if res is not None: movers.append(res)
+    
+    return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
 
 @st.cache_data(ttl=300)
 def get_market_news():
@@ -515,15 +540,14 @@ if page_selection == "📈 MAIN TERMINAL":
             indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Fin Nifty", p5_ltp, p5_chg, p5_pct), ("Nifty IT", p6_ltp, p6_chg, p6_pct)]
         else:
             live_data = get_coindcx_live_prices()
-            # PERFECT FIX: Using correct CoinDCX Pair format ("BTCUSDT")
-            p1_ltp, p1_pct = get_crypto_price_v2(live_data, "BTCUSDT")
-            p2_ltp, p2_pct = get_crypto_price_v2(live_data, "ETHUSDT")
-            p3_ltp, p3_pct = get_crypto_price_v2(live_data, "SOLUSDT")
-            p4_ltp, p4_pct = get_crypto_price_v2(live_data, "BNBUSDT")
-            p5_ltp, p5_pct = get_crypto_price_v2(live_data, "XRPUSDT")
-            p6_ltp, p6_pct = get_crypto_price_v2(live_data, "DOGEUSDT")
+            # 🚨 FIX: Using CoinDCX Specific 'B-' format 🚨
+            p1_ltp, p1_pct = get_crypto_price_v2(live_data, "B-BTC_USDT")
+            p2_ltp, p2_pct = get_crypto_price_v2(live_data, "B-ETH_USDT")
+            p3_ltp, p3_pct = get_crypto_price_v2(live_data, "B-SOL_USDT")
+            p4_ltp, p4_pct = get_crypto_price_v2(live_data, "B-BNB_USDT")
+            p5_ltp, p5_pct = get_crypto_price_v2(live_data, "B-XRP_USDT")
+            p6_ltp, p6_pct = get_crypto_price_v2(live_data, "B-DOGE_USDT")
             
-            # Calculating change amount based on % for display consistency
             p1_chg = (p1_ltp * p1_pct) / 100 if p1_pct else 0.0
             p2_chg = (p2_ltp * p2_pct) / 100 if p2_pct else 0.0
             p3_chg = (p3_ltp * p3_pct) / 100 if p3_pct else 0.0
@@ -654,9 +678,15 @@ if page_selection == "📈 MAIN TERMINAL":
 elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🚀 24H Crypto Movers"]:
     st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
     with st.spinner("Scanning ALL Assets..."):
-        # Note: get_opening_movers function needs to be defined if you want to use this section.
-        # movers = get_opening_movers(all_assets)
-        st.info("Scanner data logic will run here.")
+        movers = get_opening_movers(all_assets)
+    if movers:
+        m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock / Coin</th><th>LTP</th><th>Movement %</th></tr>"
+        for m in movers: 
+            c = "green" if m['Pct'] > 0 else "red"
+            m_html += f"<tr><td style='font-weight:bold;'>{m['Stock']}</td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
+        m_html += "</table></div>"
+        st.markdown(m_html, unsafe_allow_html=True)
+    else: st.info("No significant movement found based on live data.")
 
 elif page_selection in ["🔥 9:20 AM: OI Setup", "🔥 Volume Spikes & OI"]:
     st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
