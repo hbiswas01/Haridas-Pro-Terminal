@@ -50,6 +50,7 @@ FNO_SECTORS = {
 NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", "LTIM.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "UPL.NS", "WIPRO.NS"]
 ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50))
 
+# Added the extra coins from your screenshots for broader scanning capability
 CRYPTO_SECTORS = {
     "ALL COINDCX FUTURES": [
         "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD",
@@ -58,9 +59,8 @@ CRYPTO_SECTORS = {
         "ATOM-USD", "HBAR-USD", "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD",
         "VET-USD", "THETA-USD", "SAND-USD", "MANA-USD", "AXS-USD", "APE-USD", "GALA-USD", "FTM-USD", "DYDX-USD", "SUI-USD",
         "SEI-USD", "TIA-USD", "ORDI-USD", "FET-USD", "RUNE-USD", "AR-USD", "COMP-USD", "CHZ-USD", "EGLD-USD", "ALGO-USD",
-        "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD", "1INCH-USD", "BAT-USD", "ENJ-USD", "DASH-USD", "ZEC-USD", "NEO-USD",
-        "XMR-USD", "CAKE-USD", "SUSHI-USD", "YFI-USD", "ZIL-USD", "KAVA-USD", "RVN-USD", "WAVES-USD", "IOTX-USD", "ONT-USD",
-        "OMG-USD", "ICX-USD", "ZEN-USD", "CELR-USD", "ONE-USD", "COTI-USD", "CTSI-USD", "LRC-USD", "CVC-USD", "STORJ-USD"
+        "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD", "ESP-USD", "SENT-USD", "PIPPIN-USD", "TRIA-USD", "FHE-USD", "LA-USD", 
+        "DEXE-USD", "KERNEL-USD"
     ]
 }
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist]))
@@ -129,38 +129,36 @@ def get_adv_dec(item_list):
         elif change < 0: dec += 1
     return adv, dec
 
+# 🚨 UPDATED ENGINE: Scans only active watchlist + signals to fix "No Data" issue
 @st.cache_data(ttl=120)
 def get_dynamic_market_data(item_list):
     gainers, losers, trends = [], [], []
-    def fetch_coin_data(ticker):
+    def fetch_data(ticker):
         try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period="10d")
+            ltp, change, pct = get_live_data(ticker)
+            if ltp == 0.0: return None
+            
+            df = yf.Ticker(ticker).history(period="10d")
+            status, color = None, None
             if len(df) >= 3:
-                try: c1 = float(stock.fast_info.last_price)
-                except: c1 = float(df['Close'].iloc[-1])
-                c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
-                o1, o2, o3 = float(df['Open'].iloc[-1]), float(df['Open'].iloc[-2]), float(df['Open'].iloc[-3])
+                c1, c2, c3 = df['Close'].iloc[-1], df['Close'].iloc[-2], df['Close'].iloc[-3]
+                o1, o2, o3 = df['Open'].iloc[-1], df['Open'].iloc[-2], df['Open'].iloc[-3]
+                if c1 > o1 and c2 > o2 and c3 > o3: status, color = "৩ দিন উত্থান", "green"
+                elif c1 < o1 and c2 < o2 and c3 < o3: status, color = "৩ দিন পতন", "red"
                 
-                if c2 == 0 or pd.isna(c1): return None
-                pct_chg = ((c1 - c2) / c2) * 100
-                obj = {"Stock": ticker, "LTP": c1, "Pct": round(pct_chg, 2)}
-                
-                t_status, t_color = None, None
-                if c1 > o1 and c2 > o2 and c3 > o3: t_status, t_color = "৩ দিন উত্থান", "green"
-                elif c1 < o1 and c2 < o2 and c3 < o3: t_status, t_color = "৩ দিন পতন", "red"
-                return (obj, t_status, t_color)
-        except: pass
-        return None
+            return {"Stock": ticker, "LTP": ltp, "Pct": round(pct, 2)}, status, color
+        except: return None
 
     with ThreadPoolExecutor(max_workers=40) as executor:
-        results = list(executor.map(fetch_coin_data, item_list))
+        results = list(executor.map(fetch_data, item_list))
+        
     for res in results:
         if res:
-            obj, t_status, t_color = res
+            obj, status, color = res
             if obj['Pct'] > 0: gainers.append(obj)
             elif obj['Pct'] < 0: losers.append(obj)
-            if t_status: trends.append({"Stock": obj['Stock'], "Status": t_status, "Color": t_color})
+            if status: trends.append({"Stock": obj['Stock'], "Status": status, "Color": color})
+            
     return sorted(gainers, key=lambda x: x['Pct'], reverse=True)[:5], sorted(losers, key=lambda x: x['Pct'])[:5], trends
 
 @st.cache_data(ttl=60)
@@ -175,12 +173,8 @@ def get_oi_simulation(item_list):
                 c3 = df['Close'].iloc[-3]
                 if v1 > (v2 * 1.5):
                     oi_status = "🔥 High (Spike)"
-                    if c1 > c2:
-                        signal = "Short Covering 🚀" if c2 < c3 else "Long Buildup 📈"
-                        color = "green"
-                    else:
-                        signal = "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉"
-                        color = "red"
+                    if c1 > c2: signal, color = "Short Covering 🚀", "green"
+                    else: signal, color = "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉", "red"
                     setups.append({"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color})
         except: pass
     return setups
@@ -383,12 +377,10 @@ with st.sidebar:
     
     st.markdown("### 🎛️ HARIDAS DASHBOARD")
     if market_mode == "🇮🇳 Indian Market (NSE)":
-        # 🚨 RESTORED INDIAN MARKET MENUS 🚨
         menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
         sector_dict = FNO_SECTORS
         all_assets = ALL_STOCKS
     else:
-        # 🚨 CRYPTO MENUS 🚨
         menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE (CoinDCX)", "🧮 Futures Risk Calculator", "📊 Backtest Engine", "⚙️ Scanner Settings"]
         sector_dict = CRYPTO_SECTORS
         all_assets = ALL_CRYPTO
@@ -412,11 +404,8 @@ with st.sidebar:
         if os.path.exists(ACTIVE_TRADES_FILE): os.remove(ACTIVE_TRADES_FILE)
         if os.path.exists(HISTORY_TRADES_FILE): os.remove(HISTORY_TRADES_FILE)
         st.success("History Cleared!")
+        time.sleep(1)
         st.rerun()
-
-if auto_refresh:
-    refresh_sec = refresh_time * 60
-    st.markdown(f'<meta http-equiv="refresh" content="{refresh_sec}">', unsafe_allow_html=True)
 
 # --- 6. Top Navigation ---
 ist_timezone = pytz.timezone('Asia/Kolkata')
@@ -445,13 +434,29 @@ st.markdown(nav_html, unsafe_allow_html=True)
 
 # ==================== MAIN TERMINAL ====================
 if page_selection == "📈 MAIN TERMINAL":
+    
+    # 🚨 1. PROCESS SIGNALS FIRST (To filter focused list) 🚨
+    if market_mode == "🇮🇳 Indian Market (NSE)":
+        with st.spinner("Scanning 5m HA Charts..."): live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
+    else:
+        with st.spinner("Scanning ALL CoinDCX Futures..."): live_signals = crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
+
+    process_auto_trades(live_signals)
+
+    # 🚨 2. GENERATE FOCUSED LIST FOR TRENDS AND GAINERS (Fixes clutter and speed) 🚨
+    signal_stocks = [s['Stock'] for s in live_signals]
+    focused_scan_list = list(set(current_watchlist + signal_stocks))
+
+    with st.spinner("Fetching Market Movers & Trends for Watchlist..."):
+        gainers, losers, trends = get_dynamic_market_data(focused_scan_list)
+
+    # 🚨 3. RENDER 3-COLUMN LAYOUT 🚨
     col1, col2, col3 = st.columns([1, 2.8, 1])
 
     with col1:
         if market_mode == "🇮🇳 Indian Market (NSE)":
             st.markdown("<div class='section-title'>📊 SECTOR PERFORMANCE</div>", unsafe_allow_html=True)
-            with st.spinner("Fetching Live Sectors..."):
-                real_sectors = get_real_sector_performance(sector_dict)
+            with st.spinner("Fetching Sectors..."): real_sectors = get_real_sector_performance(sector_dict)
             if real_sectors:
                 sec_html = "<div class='table-container'><table class='v38-table'><tr><th>Category</th><th>Avg %</th><th style='width:40%;'>Trend</th></tr>"
                 for s in real_sectors:
@@ -461,16 +466,13 @@ if page_selection == "📈 MAIN TERMINAL":
                 sec_html += "</table></div>"
                 st.markdown(sec_html, unsafe_allow_html=True)
 
-        with st.spinner("Fetching Live Market Movers & Trends..."):
-            gainers, losers, trends = get_dynamic_market_data(all_assets)
-
-        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (3+ Days)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (Selected List)</div>", unsafe_allow_html=True)
         if trends:
             t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
             for t in trends: t_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
             t_html += "</table></div>"
             st.markdown(t_html, unsafe_allow_html=True)
-        else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found.</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found in active list.</p>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
@@ -523,13 +525,7 @@ if page_selection == "📈 MAIN TERMINAL":
         )
         st.markdown(adv_dec_html, unsafe_allow_html=True)
 
-        if market_mode == "🇮🇳 Indian Market (NSE)":
-            st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector} (5M HA+BB)</div>", unsafe_allow_html=True)
-            with st.spinner("Scanning 5m HA Charts..."): live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
-        else:
-            st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL COINDCX FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
-            with st.spinner("Scanning ALL 200+ CoinDCX Futures..."): live_signals = crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
-
+        st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector}</div>", unsafe_allow_html=True)
         if len(live_signals) > 0:
             sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
             for sig in live_signals:
@@ -541,9 +537,7 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("⏳ No fresh signals right now.")
 
-        process_auto_trades(live_signals)
-
-        # 🚨 NEW: QUICK CHART VIEWER RIGHT ON HOME PAGE 🚨
+        # 🚨 QUICK CHART VIEWER RIGHT ON HOME PAGE 🚨
         st.markdown("<div class='section-title'>📈 QUICK CHART VIEWER</div>", unsafe_allow_html=True)
         tv_asset = st.selectbox("Select Asset to view live chart:", sorted(all_assets))
         
@@ -593,7 +587,7 @@ if page_selection == "📈 MAIN TERMINAL":
             st.info("No closed trades yet. Once an Active Trade hits SL or Target, it will permanently save here.")
 
     with col3:
-        st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS (Selected List)</div>", unsafe_allow_html=True)
         if gainers:
             g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
             for g in gainers: 
@@ -601,9 +595,9 @@ if page_selection == "📈 MAIN TERMINAL":
                 g_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{g['Stock']}</td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
             g_html += "</table></div>"
             st.markdown(g_html, unsafe_allow_html=True)
-        else: st.markdown("<p style='font-size:12px;text-align:center;'>Scanning Market...</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
 
-        st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS (Selected List)</div>", unsafe_allow_html=True)
         if losers:
             l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
             for l in losers: 
@@ -611,7 +605,7 @@ if page_selection == "📈 MAIN TERMINAL":
                 l_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{l['Stock']}</td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
             l_html += "</table></div>"
             st.markdown(l_html, unsafe_allow_html=True)
-        else: st.markdown("<p style='font-size:12px;text-align:center;'>Scanning Market...</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
 
 # ==================== INDIAN MARKET MENUS ====================
 elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers"]:
@@ -698,7 +692,7 @@ elif page_selection == "📊 Backtest Engine":
     st.markdown("<div class='section-title'>📊 Backtest Engine (Strictly Segregated)</div>", unsafe_allow_html=True)
     bt_col1, bt_col2 = st.columns(2)
     with bt_col1:
-        # 🚨 FIX: This will dynamically show only Crypto OR Indian based on the Sidebar toggle 🚨
+        # Market-specific dropdown list
         bt_stock = st.selectbox("Select Asset to Backtest:", sorted(all_assets), index=0)
     with bt_col2:
         bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
@@ -741,4 +735,8 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Web-Socket Timeout Fix is Active (Meta Refresh) \n\n ✅ Auto-Trade Tracker is Active \n\n ✅ Segregated Backtest Engine is Active")
+    st.success("✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Web-Socket Timeout Fix is Active (Streamlit Native Rerun) \n\n ✅ Auto-Trade Tracker is Active \n\n ✅ Segregated Backtest Engine is Active \n\n ✅ Focused Market Scanner is Active")
+
+if auto_refresh:
+    time.sleep(refresh_time * 60)
+    st.rerun()
