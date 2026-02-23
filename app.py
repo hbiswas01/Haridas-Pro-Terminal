@@ -494,13 +494,15 @@ if page_selection == "📈 MAIN TERMINAL":
             else:
                 st.info("⏳ Waiting for setup... No 1-Hour Heikin-Ashi BB Signal found yet.")
 
-        # 🚨 NEW: INTERACTIVE TRADE JOURNAL 🚨
+        # 🚨 NEW: INTERACTIVE TRADE JOURNAL WITH DROPDOWN 🚨
         st.markdown("<div class='section-title'>📝 TRADE JOURNAL (MANUAL LOG)</div>", unsafe_allow_html=True)
         
         with st.expander("➕ Add New Trade to Journal"):
             with st.form("journal_form"):
                 j_col1, j_col2, j_col3, j_col4 = st.columns(4)
-                with j_col1: j_asset = st.text_input("Asset (e.g. ITC.NS / BTC-USD)")
+                
+                # Dynamic Dropdown based on Market Mode
+                with j_col1: j_asset = st.selectbox("Select Asset", sorted(all_assets))
                 with j_col2: j_signal = st.selectbox("Signal", ["BUY", "SHORT"])
                 with j_col3: j_entry = st.number_input("Entry Price", min_value=0.0, format="%.4f")
                 with j_col4: j_exit = st.number_input("Exit Price", min_value=0.0, format="%.4f")
@@ -629,7 +631,7 @@ elif page_selection == "📊 Backtest Engine":
     st.markdown("<div class='section-title'>📊 Backtest Engine (Real Historical Data)</div>", unsafe_allow_html=True)
     bt_col1, bt_col2 = st.columns(2)
     with bt_col1:
-        bt_stock = st.selectbox("Select Asset to Backtest:", all_assets, index=0)
+        bt_stock = st.selectbox("Select Asset to Backtest:", sorted(all_assets), index=0)
     with bt_col2:
         bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
 
