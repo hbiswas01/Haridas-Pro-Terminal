@@ -76,18 +76,9 @@ def fmt_price(val):
         else: return f"{val:,.2f}"
     except: return "0.00"
 
-# --- 3. HELPER FUNCTIONS (Hybrid Speed Engine) ---
+# --- 3. HELPER FUNCTIONS ---
 @st.cache_data(ttl=30)
 def get_live_data(ticker_symbol):
-    # 🚨 Fast Binance Public API for Crypto (Matches CoinDCX exactly) 🚨
-    if "-USD" in ticker_symbol:
-        try:
-            symbol = ticker_symbol.replace("-USD", "USDT")
-            url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
-            res = requests.get(url, timeout=2).json()
-            return float(res['lastPrice']), float(res['priceChange']), float(res['priceChangePercent'])
-        except: pass # Fallback to Yahoo below if blocked
-        
     try:
         stock = yf.Ticker(ticker_symbol)
         fast = stock.fast_info
@@ -463,10 +454,12 @@ if page_selection == "📈 MAIN TERMINAL":
 
     process_auto_trades(live_signals)
 
-    with st.spinner("Fetching Market Movers & Trends for Watchlist..."):
-        gainers, losers, trends = get_dynamic_market_data(current_watchlist)
+    signal_stocks = [s['Stock'] for s in live_signals]
+    focused_scan_list = list(set(current_watchlist + signal_stocks))
 
-    # 🚨 FILTER: Only show Trend Continuity for Important Stocks (Signals + Gainers/Losers) 🚨
+    with st.spinner("Fetching Market Movers & Trends for Watchlist..."):
+        gainers, losers, trends = get_dynamic_market_data(focused_scan_list)
+
     important_assets = [s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers]
     filtered_trends = [t for t in trends if t['Stock'] in important_assets]
 
@@ -560,12 +553,17 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("⏳ No fresh signals right now.")
 
-        # 🚨 FIX: QUICK CHART VIEWER USING COMPONENTS (Fixes white screen issue) 🚨
+        # 🚨 FIX: INDIAN CHART ALLOWED VIA BSE (BOM) PREFIX 🚨
         st.markdown("<div class='section-title'>📈 QUICK CHART VIEWER</div>", unsafe_allow_html=True)
         tv_asset = st.selectbox("Select Asset to view live chart:", sorted(all_assets))
         
-        tv_symbol = "NSE:" + tv_asset.replace(".NS", "") if market_mode == "🇮🇳 Indian Market (NSE)" else "BINANCE:" + tv_asset.replace("-USD", "USDT")
-        
+        if market_mode == "🇮🇳 Indian Market (NSE)": 
+            tv_symbol = "BSE:" + tv_asset.replace(".NS", "")
+            tv_interval = "5"
+        else: 
+            tv_symbol = "BINANCE:" + tv_asset.replace("-USD", "USDT")
+            tv_interval = "60"
+            
         widget_html = f"""
         <div class="tradingview-widget-container">
           <div id="tradingview_chart_xyz"></div>
@@ -576,7 +574,7 @@ if page_selection == "📈 MAIN TERMINAL":
           "width": "100%",
           "height": 400,
           "symbol": "{tv_symbol}",
-          "interval": "60",
+          "interval": "{tv_interval}",
           "timezone": "Asia/Kolkata",
           "theme": "light",
           "style": "1",
@@ -592,7 +590,7 @@ if page_selection == "📈 MAIN TERMINAL":
         """
         components.html(widget_html, height=400)
 
-        # 🚨 FIX: MARKET SEGREGATION FOR TRADES (Shows only relevant trades) 🚨
+        # 🚨 FIX: MARKET SEGREGATION FOR TRADES 🚨
         display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
         display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
 
