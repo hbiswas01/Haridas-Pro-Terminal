@@ -363,4 +363,4 @@ if market_mode == "🇮🇳 Indian Market (NSE)":
     terminal_title = "HARIDAS NSE TERMINAL"
     if curr_time < t_915: session, session_color = "PRE-MARKET", "#ff9800" 
     elif curr_time <= t_1530: session, session_color = "LIVE MARKET", "#28a745" 
-    else: session, session_color = "POST MARKET", "#
+    else: session, session_color = "POST MARKET", "#dc3545"
