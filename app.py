@@ -50,16 +50,7 @@ NIFTY_NEXT_50 = ["ABB.NS", "ADANIENSOL.NS", "ADANIGREEN.NS", "AMBUJACEM.NS", "DM
 ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50 + NIFTY_NEXT_50))
 
 CRYPTO_SECTORS = {
-    "ALL COINDCX FUTURES": [
-        "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD",
-        "LINK-USD", "DOT-USD", "TRX-USD", "MATIC-USD", "AGLD-USD", "BEL-USD", "SNX-USD", "AAVE-USD",
-        "UNI-USD", "NEAR-USD", "APT-USD", "LDO-USD", "CRV-USD", "MKR-USD", "SHIB-USD", "PEPE-USD",
-        "WIF-USD", "FLOKI-USD", "BONK-USD", "LTC-USD", "BCH-USD", "XLM-USD", "ATOM-USD", "HBAR-USD",
-        "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD",
-        "VET-USD", "THETA-USD", "SAND-USD", "MANA-USD", "AXS-USD", "APE-USD", "GALA-USD", "FTM-USD",
-        "DYDX-USD", "SUI-USD", "SEI-USD", "TIA-USD", "ORDI-USD", "FET-USD", "RUNE-USD", "AR-USD",
-        "COMP-USD", "CHZ-USD", "EGLD-USD", "ALGO-USD", "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD"
-    ],
+    "ALL COINDCX FUTURES": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD", "TRX-USD", "MATIC-USD", "AGLD-USD", "BEL-USD", "SNX-USD", "AAVE-USD", "UNI-USD", "NEAR-USD", "APT-USD", "LDO-USD", "CRV-USD", "MKR-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD", "LTC-USD", "BCH-USD", "XLM-USD", "ATOM-USD", "HBAR-USD", "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD", "VET-USD", "THETA-USD", "SAND-USD", "MANA-USD", "AXS-USD", "APE-USD", "GALA-USD", "FTM-USD", "DYDX-USD", "SUI-USD", "SEI-USD", "TIA-USD", "ORDI-USD", "FET-USD", "RUNE-USD", "AR-USD", "COMP-USD", "CHZ-USD", "EGLD-USD", "ALGO-USD", "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD"],
     "TOP WATCHLIST": ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD"],
     "LAYER 1": ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "NEAR-USD"],
     "MEME COINS": ["DOGE-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD"],
@@ -74,22 +65,34 @@ def fmt_price(val):
     elif val < 1: return f"{val:.4f}"
     else: return f"{val:,.2f}"
 
-# --- 3. HELPER FUNCTIONS ---
+# 🚨 BULLETPROOF LIVE DATA ENGINE (Fixes the wrong percentage bug) 🚨
 @st.cache_data(ttl=30)
 def get_live_data(ticker_symbol):
     try:
         stock = yf.Ticker(ticker_symbol)
-        df = stock.history(period='5d')
-        if not df.empty:
-            ltp = df['Close'].iloc[-1]
-            try: prev_close = stock.fast_info.previous_close
-            except: prev_close = df['Close'].iloc[-2] if len(df) > 1 else ltp
-            if pd.isna(ltp) or pd.isna(prev_close) or prev_close == 0: return 0.0, 0.0, 0.0
-            change = ltp - prev_close
-            pct_change = (change / prev_close) * 100
-            return float(ltp), float(change), float(pct_change)
+        fast = stock.fast_info
+        
+        try:
+            ltp = float(fast.last_price)
+            prev_close = float(fast.previous_close)
+        except:
+            # Fallback if fast_info fails
+            df = stock.history(period='5d')
+            if len(df) >= 2:
+                ltp = float(df['Close'].iloc[-1])
+                prev_close = float(df['Close'].iloc[-2])
+            else:
+                return 0.0, 0.0, 0.0
+
+        if pd.isna(ltp) or pd.isna(prev_close) or prev_close == 0: 
+            return 0.0, 0.0, 0.0
+            
+        change = ltp - prev_close
+        pct_change = (change / prev_close) * 100
+        
+        return ltp, change, pct_change
+    except: 
         return 0.0, 0.0, 0.0
-    except: return 0.0, 0.0, 0.0
 
 @st.cache_data(ttl=300)
 def get_market_news():
@@ -139,16 +142,24 @@ def get_dynamic_market_data(item_list):
     gainers, losers, trends = [], [], []
     for ticker in item_list:
         try:
-            df = yf.Ticker(ticker).history(period="10d")
+            stock = yf.Ticker(ticker)
+            df = stock.history(period="10d")
             if len(df) >= 3:
-                c1, o1 = df['Close'].iloc[-1], df['Open'].iloc[-1]
-                c2, o2 = df['Close'].iloc[-2], df['Open'].iloc[-2]
-                c3, o3 = df['Close'].iloc[-3], df['Open'].iloc[-3]
+                # Live LTP overriding history lag
+                fast = stock.fast_info
+                try: c1 = float(fast.last_price)
+                except: c1 = float(df['Close'].iloc[-1])
+                
+                c2 = float(df['Close'].iloc[-2])
+                c3 = float(df['Close'].iloc[-3])
+                o1 = float(df['Open'].iloc[-1])
+                o2 = float(df['Open'].iloc[-2])
+                o3 = float(df['Open'].iloc[-3])
                 
                 if c2 == 0 or pd.isna(c1): continue
                 
                 pct_chg = ((c1 - c2) / c2) * 100
-                obj = {"Stock": ticker, "LTP": float(c1), "Pct": round(pct_chg, 2)}
+                obj = {"Stock": ticker, "LTP": c1, "Pct": round(pct_chg, 2)}
                 
                 if pct_chg > 0: gainers.append(obj)
                 elif pct_chg < 0: losers.append(obj)
@@ -295,20 +306,9 @@ def crypto_ha_bb_strategy(crypto_list):
         if res is not None: signals.append(res)
     return signals
 
-@st.cache_data(ttl=60)
-def get_opening_movers(stock_list):
-    movers = []
-    for ticker in stock_list:
-        ltp, _, pct = get_live_data(ticker)
-        if abs(pct) >= 2.0:
-            movers.append({"Stock": ticker, "LTP": ltp, "Pct": pct})
-    return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
-
-# 🚨 AUTOMATIC TRADE TRACKER ENGINE 🚨
 def process_auto_trades(live_signals):
     ist_timezone = pytz.timezone('Asia/Kolkata')
     current_time_str = datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M")
-    
     active_stocks = [t['Stock'] for t in st.session_state.active_trades]
 
     for sig in live_signals:
@@ -342,7 +342,6 @@ def process_auto_trades(live_signals):
 
         if close_reason:
             pnl_pct = ((exit_price - trade['Entry']) / trade['Entry']) * 100 if trade['Signal'] == 'BUY' else ((trade['Entry'] - exit_price) / trade['Entry']) * 100
-            
             completed_trade = {
                 "Date": current_time_str, "Stock": trade['Stock'], "Signal": trade['Signal'],
                 "Entry": trade['Entry'], "Exit": exit_price, "Status": close_reason, "P&L %": round(pnl_pct, 2)
@@ -376,7 +375,6 @@ css_string = (
     ".bar-bg { background: #e0e0e0; width: 100%; height: 14px; min-width: 50px; border-radius: 3px; } "
     ".bar-fg-green { background: #276a44; height: 100%; border-radius: 3px; } "
     ".bar-fg-red { background: #8b0000; height: 100%; border-radius: 3px; } "
-    ".calc-box { background: white; border: 1px solid #00ffd0; padding: 15px; border-radius: 8px; box-shadow: 0px 2px 8px rgba(0,0,0,0.1); margin-top: 15px;} "
     "</style>"
 )
 st.markdown(css_string, unsafe_allow_html=True)
@@ -418,7 +416,6 @@ with st.sidebar:
         st.success("History Cleared!")
         st.rerun()
 
-# 🚨 SMART HTML AUTO-REFRESH (Fixes Streamlit "Code: 1ST" Timeout) 🚨
 if auto_refresh:
     refresh_sec = refresh_time * 60
     st.markdown(f'<meta http-equiv="refresh" content="{refresh_sec}">', unsafe_allow_html=True)
@@ -450,8 +447,6 @@ st.markdown(nav_html, unsafe_allow_html=True)
 
 # ==================== MAIN TERMINAL ====================
 if page_selection == "📈 MAIN TERMINAL":
-    
-    # 🚨 3-COLUMN LAYOUT RESTORED HERE 🚨
     col1, col2, col3 = st.columns([1, 2.8, 1])
 
     # --- COLUMN 1 (SECTORS & TRENDS) ---
@@ -489,9 +484,10 @@ if page_selection == "📈 MAIN TERMINAL":
             p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI")
             p3_ltp, p3_chg, p3_pct = get_live_data("INR=X")
             p4_ltp, p4_chg, p4_pct = get_live_data("^NSEBANK")
-            p5_ltp, p5_chg, p5_pct = get_live_data("^CRSMY")
-            p6_ltp, p6_chg, p6_pct = get_live_data("^CRSLDX")
-            indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Nifty Mid100", p5_ltp, p5_chg, p5_pct), ("Nifty Small100", p6_ltp, p6_chg, p6_pct)]
+            # 🚨 FIX: Replaced dead indices with reliable options 🚨
+            p5_ltp, p5_chg, p5_pct = get_live_data("NIFTY_FIN_SERVICE.NS") 
+            p6_ltp, p6_chg, p6_pct = get_live_data("^CNXIT") 
+            indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Fin Nifty", p5_ltp, p5_chg, p5_pct), ("Nifty IT", p6_ltp, p6_chg, p6_pct)]
         else:
             p1_ltp, p1_chg, p1_pct = get_live_data("BTC-USD")
             p2_ltp, p2_chg, p2_pct = get_live_data("ETH-USD")
@@ -505,9 +501,17 @@ if page_selection == "📈 MAIN TERMINAL":
         for name, val, chg, pct in indices:
             clr = "green" if chg >= 0 else "red"
             sign = "+" if chg >= 0 else ""
-            prefix = "₹" if name == "USDINR" else ("$" if market_mode != "🇮🇳 Indian Market (NSE)" else "")
-            val_str = f"{val:,.6f}".rstrip('0').rstrip('.') if val < 1 else f"{val:,.2f}"
-            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{fmt_price(chg)} ({sign}{pct:.2f}%)</span></div>"
+            prefix = "₹" if name != "USDINR" and market_mode == "🇮🇳 Indian Market (NSE)" else ("$" if market_mode != "🇮🇳 Indian Market (NSE)" else "")
+            
+            # Formatter logic for indices 
+            if name == "USDINR":
+                val_str, chg_str = f"{val:.4f}", f"{chg:.4f}"
+            elif market_mode != "🇮🇳 Indian Market (NSE)":
+                val_str, chg_str = fmt_price(val), fmt_price(chg)
+            else:
+                val_str, chg_str = f"{val:,.2f}", f"{chg:,.2f}"
+
+            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{chg_str} ({sign}{pct:.2f}%)</span></div>"
         indices_html += "</div>"
         st.markdown(indices_html, unsafe_allow_html=True)
 
@@ -530,7 +534,6 @@ if page_selection == "📈 MAIN TERMINAL":
         )
         st.markdown(adv_dec_html, unsafe_allow_html=True)
 
-        # 1. Fetch & Display Live Signals
         if market_mode == "🇮🇳 Indian Market (NSE)":
             st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector} (5M HA+BB)</div>", unsafe_allow_html=True)
             with st.spinner("Scanning 5m HA Charts..."): live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
@@ -549,10 +552,8 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("⏳ No fresh signals right now.")
 
-        # 2. Process Auto Trades in Background
         process_auto_trades(live_signals)
 
-        # 3. Display Active Trades (Running)
         st.markdown("<div class='section-title'>⏳ ACTIVE TRADES (RUNNING AUTO-TRACKER)</div>", unsafe_allow_html=True)
         if len(st.session_state.active_trades) > 0:
             df_active = pd.DataFrame(st.session_state.active_trades)
@@ -560,13 +561,38 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("No trades are currently active. Waiting for LTP to cross Signal Entry...")
 
-        # 4. Display Closed Trade History (Saved in Folder/File)
+        st.markdown("<div class='section-title'>📝 TRADE JOURNAL (MANUAL LOG)</div>", unsafe_allow_html=True)
+        with st.expander("➕ Add New Trade to Journal"):
+            with st.form("journal_form"):
+                j_col1, j_col2, j_col3, j_col4 = st.columns(4)
+                with j_col1: j_asset = st.selectbox("Select Asset", sorted(all_assets))
+                with j_col2: j_signal = st.selectbox("Signal", ["BUY", "SHORT"])
+                with j_col3: j_entry = st.number_input("Entry Price", min_value=0.0, format="%.4f")
+                with j_col4: j_exit = st.number_input("Exit Price", min_value=0.0, format="%.4f")
+                submit_trade = st.form_submit_button("💾 Save Trade")
+                
+                if submit_trade and j_asset != "":
+                    if j_entry > 0 and j_exit > 0:
+                        pnl_pct = ((j_exit - j_entry) / j_entry) * 100 if j_signal == "BUY" else ((j_entry - j_exit) / j_entry) * 100
+                        st.session_state.trade_history.append({
+                            "Date": datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M"),
+                            "Stock": j_asset.upper(), "Signal": j_signal, "Entry": j_entry, "Exit": j_exit,
+                            "Status": "MANUAL ENTRY", "P&L %": round(pnl_pct, 2)
+                        })
+                        save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
+                        st.success("✅ Trade saved!")
+
         st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY (CLOSED TRADES)</div>", unsafe_allow_html=True)
         if len(st.session_state.trade_history) > 0:
             df_history = pd.DataFrame(st.session_state.trade_history)
             df_display = df_history.copy()
+            df_display['Entry'] = df_display['Entry'].apply(lambda x: fmt_price(float(x)))
+            df_display['Exit'] = df_display['Exit'].apply(lambda x: fmt_price(float(x)))
             df_display['P&L %'] = df_display['P&L %'].apply(lambda x: f"+{x}%" if float(x) >= 0 else f"{x}%")
             st.dataframe(df_display, use_container_width=True)
+            
+            csv_journal = df_history.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Export Journal to Excel", data=csv_journal, file_name=f"Haridas_Journal_{datetime.date.today()}.csv", mime="text/csv")
         else:
             st.info("No closed trades yet. Once an Active Trade hits SL or Target, it will permanently save here.")
 
@@ -617,85 +643,3 @@ elif page_selection in ["🔥 9:20 AM: OI Setup", "🔥 Volume Spikes & OI"]:
         oi_html += "</table></div>"
         st.markdown(oi_html, unsafe_allow_html=True)
     else: st.info("No significant real volume/OI spikes detected.")
-
-elif page_selection == "🧮 Futures Risk Calculator":
-    st.markdown("<div class='section-title'>🧮 Crypto Futures Risk Calculator</div>", unsafe_allow_html=True)
-    st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
-    calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
-    with calc_col1:
-        trade_type = st.selectbox("Trade Direction", ["LONG (Buy)", "SHORT (Sell)"])
-        capital = st.number_input("Total Capital (USDT)", min_value=1.0, value=100.0, step=10.0)
-    with calc_col2:
-        entry_price = st.number_input("Entry Price (USDT)", min_value=0.000001, value=65000.0, step=10.0, format="%.6f")
-        leverage = st.slider("Leverage (x)", min_value=1, max_value=100, value=10)
-    with calc_col3:
-        stop_loss = st.number_input("Stop Loss (USDT)", min_value=0.000001, value=64000.0, step=10.0, format="%.6f")
-        risk_pct = st.number_input("Risk % per Trade", min_value=0.1, max_value=100.0, value=2.0, step=0.5)
-    with calc_col4:
-        st.write("")
-        st.write("")
-        if st.button("🚀 Calculate Risk", use_container_width=True):
-            price_diff = abs(entry_price - stop_loss)
-            if price_diff > 0:
-                risk_amt = capital * (risk_pct / 100)
-                pos_size_coin = risk_amt / price_diff
-                pos_size_usdt = pos_size_coin * entry_price
-                margin_required = pos_size_usdt / leverage
-                liq_price = entry_price * (1 - (1/leverage)) if trade_type == "LONG (Buy)" else entry_price * (1 + (1/leverage))
-                st.success(f"**Margin Needed:** ${margin_required:.2f}")
-                st.info(f"**Position Size:** {fmt_price(pos_size_coin)} Coins (${pos_size_usdt:.2f})")
-                st.error(f"**Liquidation Price ⚠️:** ${fmt_price(liq_price)}")
-            else: st.warning("Entry and Stop Loss cannot be the same!")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-elif page_selection == "⚙️ Scanner Settings":
-    st.markdown("<div class='section-title'>⚙️ Scanner Settings</div>", unsafe_allow_html=True)
-    st.success("Your terminal is fully integrated. PURE LIVE data mode is active with dynamic decimal formatting.")
-
-elif page_selection == "📊 Backtest Engine":
-    st.markdown("<div class='section-title'>📊 Backtest Engine (Real Historical Data)</div>", unsafe_allow_html=True)
-    bt_col1, bt_col2 = st.columns(2)
-    with bt_col1:
-        bt_stock = st.selectbox("Select Asset to Backtest:", sorted(all_assets), index=0)
-    with bt_col2:
-        bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
-
-    if st.button("🚀 Run Backtest", use_container_width=True):
-        with st.spinner(f"Fetching {bt_period} historical data for {bt_stock}..."):
-            try:
-                bt_data = yf.Ticker(bt_stock).history(period=bt_period)
-                if len(bt_data) > 3:
-                    trades = []
-                    for i in range(3, len(bt_data)):
-                        c1, o1 = bt_data['Close'].iloc[i-1], bt_data['Open'].iloc[i-1]
-                        c2, o2 = bt_data['Close'].iloc[i-2], bt_data['Open'].iloc[i-2]
-                        c3, o3 = bt_data['Close'].iloc[i-3], bt_data['Open'].iloc[i-3]
-
-                        if c1 > o1 and c2 > o2 and c3 > o3:
-                            entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
-                            if entry_price > 0:
-                                pnl = ((entry_price - exit_price) / entry_price) * 100
-                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days GREEN", "Signal": "SHORT", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
-                        
-                        elif c1 < o1 and c2 < o2 and c3 < o3:
-                            entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
-                            if entry_price > 0:
-                                pnl = ((exit_price - entry_price) / entry_price) * 100
-                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days RED", "Signal": "BUY", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
-
-                    bt_df = pd.DataFrame(trades)
-                    if not bt_df.empty:
-                        st.success(f"✅ Backtest completed for {bt_stock}. Found {len(bt_df)} setups.")
-                        total_pnl = bt_df['P&L %'].sum()
-                        win_rate = (len(bt_df[bt_df['P&L %'] > 0]) / len(bt_df)) * 100
-                        m_col1, m_col2, m_col3 = st.columns(3)
-                        m_col1.metric("Total Trades", len(bt_df))
-                        m_col2.metric("Win Rate", f"{win_rate:.2f}%")
-                        m_col3.metric("Total Strategy P&L %", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%")
-                        st.dataframe(bt_df, use_container_width=True)
-                    else: st.info(f"No valid setups found for {bt_stock} in the last {bt_period}.")
-            except Exception as e: st.error(f"Error fetching data: {e}")
-
-if auto_refresh:
-    time.sleep(refresh_time * 60)
-    st.rerun()
