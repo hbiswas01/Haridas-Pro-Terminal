@@ -363,7 +363,7 @@ if market_mode == "🇮🇳 Indian Market (NSE)":
     terminal_title = "HARIDAS NSE TERMINAL"
     if curr_time < t_915: session, session_color = "PRE-MARKET", "#ff9800" 
     elif curr_time <= t_1530: session, session_color = "LIVE MARKET", "#28a745" 
-    else: session, session_color = "POST MARKET", "#            try: prev_close = stock.fast_info.previous_close
+    else: session, session_color = "POST MARKET", "#dc3545"            try: prev_close = stock.fast_info.previous_close
             except: prev_close = df['Close'].iloc[-2] if len(df) > 1 else ltp
             
             if pd.isna(ltp) or pd.isna(prev_close) or prev_close == 0: return 0.0, 0.0, 0.0
