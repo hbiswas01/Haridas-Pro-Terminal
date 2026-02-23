@@ -363,4 +363,312 @@ if market_mode == "🇮🇳 Indian Market (NSE)":
     terminal_title = "HARIDAS NSE TERMINAL"
     if curr_time < t_915: session, session_color = "PRE-MARKET", "#ff9800" 
     elif curr_time <= t_1530: session, session_color = "LIVE MARKET", "#28a745" 
-    else: session, session_color = "POST MARKET", "#dc3545"
+    else: session, session_color = "POST MARKET", "#dc3545" 
+else:
+    terminal_title = "HARIDAS CRYPTO TERMINAL"
+    session, session_color = "LIVE 24/7 (CRYPTO)", "#17a2b8"
+
+nav_html = (
+    "<div class='top-nav'>"
+    f"<div style='color:#00ffd0; font-weight:900; font-size:22px; letter-spacing:2px; text-transform:uppercase; text-shadow: 0px 0px 10px rgba(0, 255, 208, 0.6);'>📊 {terminal_title}</div>"
+    "<div style='font-size: 14px; color: #ffeb3b; font-weight: bold; display: flex; align-items: center;'>"
+    f"<span style='background: {session_color}; color: white; padding: 3px 10px; border-radius: 4px; margin-right: 15px;'>{session}</span>"
+    f"🕒 {curr_time.strftime('%H:%M:%S')} (IST)"
+    "</div>"
+    "<div>"
+    "<span style='background:#1a73e8; padding:5px 15px; font-size:11px; color:white; font-weight:bold; border-radius:4px; cursor:pointer;'>SCAN MARKET</span>"
+    "</div></div>"
+)
+st.markdown(nav_html, unsafe_allow_html=True)
+
+# ==================== MAIN TERMINAL ====================
+if page_selection == "📈 MAIN TERMINAL":
+    col1, col2, col3 = st.columns([1, 2.8, 1])
+
+    # --- COLUMN 1 (SECTORS & TRENDS) ---
+    with col1:
+        title = "📊 SECTOR PERFORMANCE" if market_mode == "🇮🇳 Indian Market (NSE)" else "📊 CRYPTO CATEGORIES"
+        st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+        with st.spinner("Fetching Live Sectors..."):
+            real_sectors = get_real_sector_performance(sector_dict)
+        if real_sectors:
+            sec_html = "<div class='table-container'><table class='v38-table'><tr><th>Category</th><th>Avg %</th><th style='width:40%;'>Trend</th></tr>"
+            for s in real_sectors:
+                c = "green" if s['Pct'] >= 0 else "red"
+                bc = "bar-fg-green" if s['Pct'] >= 0 else "bar-fg-red"
+                sec_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{s['Sector']}</td><td style='color:{c}; font-weight:bold;'>{s['Pct']}%</td><td style='padding:4px 8px;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></td></tr>"
+            sec_html += "</table></div>"
+            st.markdown(sec_html, unsafe_allow_html=True)
+
+        with st.spinner("Fetching Live Market Movers & Trends..."):
+            gainers, losers, trends = get_dynamic_market_data(all_assets)
+
+        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (3+ Days)</div>", unsafe_allow_html=True)
+        if trends:
+            t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
+            for t in trends: t_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
+            t_html += "</table></div>"
+            st.markdown(t_html, unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found.</p>", unsafe_allow_html=True)
+
+    # --- COLUMN 2 (INDICES, ADV/DEC, SIGNALS, JOURNAL) ---
+    with col2:
+        st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
+        
+        if market_mode == "🇮🇳 Indian Market (NSE)":
+            p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN")
+            p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI")
+            p3_ltp, p3_chg, p3_pct = get_live_data("INR=X")
+            p4_ltp, p4_chg, p4_pct = get_live_data("^NSEBANK")
+            p5_ltp, p5_chg, p5_pct = get_live_data("^CRSMY")
+            p6_ltp, p6_chg, p6_pct = get_live_data("^CRSLDX")
+            indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Nifty Mid100", p5_ltp, p5_chg, p5_pct), ("Nifty Small100", p6_ltp, p6_chg, p6_pct)]
+        else:
+            p1_ltp, p1_chg, p1_pct = get_live_data("BTC-USD")
+            p2_ltp, p2_chg, p2_pct = get_live_data("ETH-USD")
+            p3_ltp, p3_chg, p3_pct = get_live_data("SOL-USD")
+            p4_ltp, p4_chg, p4_pct = get_live_data("BNB-USD")
+            p5_ltp, p5_chg, p5_pct = get_live_data("XRP-USD")
+            p6_ltp, p6_chg, p6_pct = get_live_data("DOGE-USD")
+            indices = [("BITCOIN", p1_ltp, p1_chg, p1_pct), ("ETHEREUM", p2_ltp, p2_chg, p2_pct), ("SOLANA", p3_ltp, p3_chg, p3_pct), ("BINANCE COIN", p4_ltp, p4_chg, p4_pct), ("RIPPLE", p5_ltp, p5_chg, p5_pct), ("DOGECOIN", p6_ltp, p6_chg, p6_pct)]
+
+        indices_html = "<div class='idx-container'>"
+        for name, val, chg, pct in indices:
+            clr = "green" if chg >= 0 else "red"
+            sign = "+" if chg >= 0 else ""
+            prefix = "₹" if name == "USDINR" else ("$" if market_mode != "🇮🇳 Indian Market (NSE)" else "")
+            val_str = f"{val:,.6f}".rstrip('0').rstrip('.') if val < 1 else f"{val:,.2f}"
+            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{fmt_price(chg)} ({sign}{pct:.2f}%)</span></div>"
+        indices_html += "</div>"
+        st.markdown(indices_html, unsafe_allow_html=True)
+
+        with st.spinner("Calculating Breadth..."):
+            adv, dec = get_adv_dec(all_assets)
+        
+        total_adv_dec = adv + dec
+        adv_pct = (adv / total_adv_dec) * 100 if total_adv_dec > 0 else 50
+        adv_title = "Advance/ Decline (NSE)" if market_mode == "🇮🇳 Indian Market (NSE)" else "Advance/ Decline (Top Crypto)"
+        
+        st.markdown(f"<div class='section-title'>📊 {adv_title}</div>", unsafe_allow_html=True)
+        adv_dec_html = (
+            "<div class='adv-dec-container'>"
+            "<div class='adv-dec-bar'>"
+            f"<div class='bar-green' style='width: {adv_pct}%;'></div>"
+            f"<div class='bar-red' style='width: {100-adv_pct}%;'></div>"
+            "</div>"
+            "<div style='display:flex; justify-content:space-between; font-size:12px; font-weight:bold;'>"
+            f"<span style='color:green;'>Advances: {adv}</span><span style='color:red;'>Declines: {dec}</span>"
+            "</div>"
+            f"<div style='font-size:10px; color:#555; margin-top:5px;'>Strategy Sentiment: <b>{user_sentiment}</b></div>"
+            "</div>"
+        )
+        st.markdown(adv_dec_html, unsafe_allow_html=True)
+
+        # 🚨 LIVE SIGNALS ENGINE 🚨
+        if market_mode == "🇮🇳 Indian Market (NSE)":
+            st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector} (5M HA+BB)</div>", unsafe_allow_html=True)
+            with st.spinner(f"Scanning 5m HA Charts for Strict Breakouts..."):
+                live_signals = nse_ha_bb_strategy_5m(current_watchlist, market_sentiment=user_sentiment)
+            
+            if len(live_signals) > 0:
+                sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (BB)</th><th>Target (1:3)</th><th>Time</th></tr>"
+                for sig in live_signals:
+                    sig_clr = "green" if sig['Signal'] == "BUY" else "red"
+                    sig_html += f"<tr><td style='color:{sig_clr}; font-weight:bold;'>{sig['Stock']}</td><td>{fmt_price(sig['Entry'])}</td><td>{fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#1a73e8;'>{fmt_price(sig['Target(BB)'])}</td><td style='font-weight:bold; color:#856404;'>{fmt_price(sig['T2(1:3)'])}</td><td>{sig['Time']}</td></tr>"
+                sig_html += "</table></div>"
+                st.markdown(sig_html, unsafe_allow_html=True)
+            else:
+                st.info("⏳ Waiting for setup... No strict 5m HA+BB breakout found yet.")
+        else:
+            st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL CRYPTO FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
+            with st.spinner("Scanning ALL 70+ CoinDCX Crypto Futures..."):
+                crypto_signals = crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
+            
+            if len(crypto_signals) > 0:
+                c_sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Coin</th><th>Entry (Norm)</th><th>LTP</th><th>Signal</th><th>SL (Norm)</th><th>Target (BB)</th><th>Target (1:3)</th><th>Alert Time</th></tr>"
+                for sig in crypto_signals:
+                    sig_clr = "green" if sig['Signal'] == "BUY" else "red"
+                    c_sig_html += f"<tr><td style='color:{sig_clr}; font-weight:bold;'>{sig['Coin']}</td><td>${fmt_price(sig['Entry'])}</td><td>${fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>${fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#1a73e8;'>${fmt_price(sig['Target(BB)'])}</td><td style='font-weight:bold; color:#856404;'>${fmt_price(sig['Target(1:3)'])}</td><td>{sig['Time']}</td></tr>"
+                c_sig_html += "</table></div>"
+                st.markdown(c_sig_html, unsafe_allow_html=True)
+            else:
+                st.info("⏳ Waiting for setup... No 1-Hour Heikin-Ashi BB Signal found yet.")
+
+        # 🚨 NEW: INTERACTIVE TRADE JOURNAL 🚨
+        st.markdown("<div class='section-title'>📝 TRADE JOURNAL (MANUAL LOG)</div>", unsafe_allow_html=True)
+        
+        with st.expander("➕ Add New Trade to Journal"):
+            with st.form("journal_form"):
+                j_col1, j_col2, j_col3, j_col4 = st.columns(4)
+                with j_col1: j_asset = st.text_input("Asset (e.g. ITC.NS / BTC-USD)")
+                with j_col2: j_signal = st.selectbox("Signal", ["BUY", "SHORT"])
+                with j_col3: j_entry = st.number_input("Entry Price", min_value=0.0, format="%.4f")
+                with j_col4: j_exit = st.number_input("Exit Price", min_value=0.0, format="%.4f")
+                
+                submit_trade = st.form_submit_button("💾 Save Trade")
+                
+                if submit_trade and j_asset != "":
+                    if j_entry > 0 and j_exit > 0:
+                        if j_signal == "BUY": pnl_pct = ((j_exit - j_entry) / j_entry) * 100
+                        else: pnl_pct = ((j_entry - j_exit) / j_entry) * 100
+                        
+                        st.session_state['trade_journal'].append({
+                            "Date": datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M"),
+                            "Asset": j_asset.upper(),
+                            "Signal": j_signal,
+                            "Entry": j_entry,
+                            "Exit": j_exit,
+                            "P&L %": round(pnl_pct, 2)
+                        })
+                        st.success("✅ Trade saved successfully! (Note: Journal resets on page hard-refresh)")
+
+        if len(st.session_state['trade_journal']) > 0:
+            df_journal = pd.DataFrame(st.session_state['trade_journal'])
+            
+            df_display = df_journal.copy()
+            df_display['Entry'] = df_display['Entry'].apply(lambda x: fmt_price(x))
+            df_display['Exit'] = df_display['Exit'].apply(lambda x: fmt_price(x))
+            df_display['P&L %'] = df_display['P&L %'].apply(lambda x: f"+{x}%" if x >= 0 else f"{x}%")
+            
+            st.dataframe(df_display, use_container_width=True)
+            
+            csv_journal = df_journal.to_csv(index=False).encode('utf-8')
+            c_btn1, c_btn2 = st.columns([1, 1])
+            with c_btn1:
+                st.download_button("📥 Export Journal to Excel", data=csv_journal, file_name=f"Haridas_Journal_{datetime.date.today()}.csv", mime="text/csv")
+            with c_btn2:
+                if st.button("🗑️ Clear Journal"):
+                    st.session_state['trade_journal'] = []
+                    st.rerun()
+        else:
+            st.info("No trades logged yet today. Use the '+ Add New Trade' button above to track your P&L.")
+
+    # --- COLUMN 3 (GAINERS & LOSERS) ---
+    with col3:
+        st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS</div>", unsafe_allow_html=True)
+        if gainers:
+            g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
+            for g in gainers: 
+                prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
+                g_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{g['Stock']}</td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
+            g_html += "</table></div>"
+            st.markdown(g_html, unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
+
+        st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS</div>", unsafe_allow_html=True)
+        if losers:
+            l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
+            for l in losers: 
+                prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
+                l_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{l['Stock']}</td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
+            l_html += "</table></div>"
+            st.markdown(l_html, unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
+
+# ==================== OTHER SECTIONS ====================
+elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🚀 24H Crypto Movers"]:
+    st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
+    with st.spinner("Scanning ALL Assets..."):
+        movers = get_opening_movers(all_assets)
+    if movers:
+        m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock / Coin</th><th>LTP</th><th>Movement %</th></tr>"
+        for m in movers: 
+            c = "green" if m['Pct'] > 0 else "red"
+            m_html += f"<tr><td style='font-weight:bold;'>{m['Stock']}</td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
+        m_html += "</table></div>"
+        st.markdown(m_html, unsafe_allow_html=True)
+    else: st.info("No significant movement found based on live data.")
+
+elif page_selection in ["🔥 9:20 AM: OI Setup", "🔥 Volume Spikes & OI"]:
+    st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
+    with st.spinner("Scanning for Volume Spikes & OI Proxy..."):
+        oi_setups = get_oi_simulation(all_assets)
+    if oi_setups:
+        oi_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Market Action (Signal)</th><th>OI / Vol Status</th></tr>"
+        for o in oi_setups: 
+            oi_html += f"<tr><td style='font-weight:bold;'>{o['Stock']}</td><td style='color:{o['Color']}; font-weight:bold;'>{o['Signal']}</td><td style='color:#1a73e8; font-weight:bold;'>{o['OI']}</td></tr>"
+        oi_html += "</table></div>"
+        st.markdown(oi_html, unsafe_allow_html=True)
+    else: st.info("No significant real volume/OI spikes detected.")
+
+elif page_selection == "🧮 Futures Risk Calculator":
+    st.markdown("<div class='section-title'>🧮 Crypto Futures Risk Calculator</div>", unsafe_allow_html=True)
+    st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
+    calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
+    with calc_col1:
+        trade_type = st.selectbox("Trade Direction", ["LONG (Buy)", "SHORT (Sell)"])
+        capital = st.number_input("Total Capital (USDT)", min_value=1.0, value=100.0, step=10.0)
+    with calc_col2:
+        entry_price = st.number_input("Entry Price (USDT)", min_value=0.000001, value=65000.0, step=10.0, format="%.6f")
+        leverage = st.slider("Leverage (x)", min_value=1, max_value=100, value=10)
+    with calc_col3:
+        stop_loss = st.number_input("Stop Loss (USDT)", min_value=0.000001, value=64000.0, step=10.0, format="%.6f")
+        risk_pct = st.number_input("Risk % per Trade", min_value=0.1, max_value=100.0, value=2.0, step=0.5)
+    with calc_col4:
+        st.write("")
+        st.write("")
+        if st.button("🚀 Calculate Risk", use_container_width=True):
+            price_diff = abs(entry_price - stop_loss)
+            if price_diff > 0:
+                risk_amt = capital * (risk_pct / 100)
+                pos_size_coin = risk_amt / price_diff
+                pos_size_usdt = pos_size_coin * entry_price
+                margin_required = pos_size_usdt / leverage
+                liq_price = entry_price * (1 - (1/leverage)) if trade_type == "LONG (Buy)" else entry_price * (1 + (1/leverage))
+                st.success(f"**Margin Needed:** ${margin_required:.2f}")
+                st.info(f"**Position Size:** {fmt_price(pos_size_coin)} Coins (${pos_size_usdt:.2f})")
+                st.error(f"**Liquidation Price ⚠️:** ${fmt_price(liq_price)}")
+            else: st.warning("Entry and Stop Loss cannot be the same!")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif page_selection == "⚙️ Scanner Settings":
+    st.markdown("<div class='section-title'>⚙️ Scanner Settings</div>", unsafe_allow_html=True)
+    st.success("Your terminal is fully integrated. PURE LIVE data mode is active with dynamic decimal formatting.")
+
+elif page_selection == "📊 Backtest Engine":
+    st.markdown("<div class='section-title'>📊 Backtest Engine (Real Historical Data)</div>", unsafe_allow_html=True)
+    bt_col1, bt_col2 = st.columns(2)
+    with bt_col1:
+        bt_stock = st.selectbox("Select Asset to Backtest:", all_assets, index=0)
+    with bt_col2:
+        bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
+
+    if st.button("🚀 Run Backtest", use_container_width=True):
+        with st.spinner(f"Fetching {bt_period} historical data for {bt_stock}..."):
+            try:
+                bt_data = yf.Ticker(bt_stock).history(period=bt_period)
+                if len(bt_data) > 3:
+                    trades = []
+                    for i in range(3, len(bt_data)):
+                        c1, o1 = bt_data['Close'].iloc[i-1], bt_data['Open'].iloc[i-1]
+                        c2, o2 = bt_data['Close'].iloc[i-2], bt_data['Open'].iloc[i-2]
+                        c3, o3 = bt_data['Close'].iloc[i-3], bt_data['Open'].iloc[i-3]
+
+                        if c1 > o1 and c2 > o2 and c3 > o3:
+                            entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
+                            if entry_price > 0:
+                                pnl = ((entry_price - exit_price) / entry_price) * 100
+                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days GREEN", "Signal": "SHORT", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
+                        
+                        elif c1 < o1 and c2 < o2 and c3 < o3:
+                            entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
+                            if entry_price > 0:
+                                pnl = ((exit_price - entry_price) / entry_price) * 100
+                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days RED", "Signal": "BUY", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
+
+                    bt_df = pd.DataFrame(trades)
+                    if not bt_df.empty:
+                        st.success(f"✅ Backtest completed for {bt_stock}. Found {len(bt_df)} setups.")
+                        total_pnl = bt_df['P&L %'].sum()
+                        win_rate = (len(bt_df[bt_df['P&L %'] > 0]) / len(bt_df)) * 100
+                        m_col1, m_col2, m_col3 = st.columns(3)
+                        m_col1.metric("Total Trades", len(bt_df))
+                        m_col2.metric("Win Rate", f"{win_rate:.2f}%")
+                        m_col3.metric("Total Strategy P&L %", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%")
+                        st.dataframe(bt_df, use_container_width=True)
+                    else: st.info(f"No valid setups found for {bt_stock} in the last {bt_period}.")
+            except Exception as e: st.error(f"Error fetching data: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_time * 60)
+    st.rerun()
