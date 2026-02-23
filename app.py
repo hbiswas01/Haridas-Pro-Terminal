@@ -8,6 +8,10 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 import os
+import requests
+import hmac
+import hashlib
+import json
 
 # --- 1. Page Configuration & Session State ---
 st.set_page_config(layout="wide", page_title="Haridas Master Terminal", initial_sidebar_state="expanded")
@@ -32,44 +36,22 @@ if 'trade_history' not in st.session_state:
 # --- 2. Live Market Data Dictionary ---
 FNO_SECTORS = {
     "MIXED WATCHLIST": ["HINDALCO.NS", "NTPC.NS", "WIPRO.NS", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS"],
-    "NIFTY METAL": ["HINDALCO.NS", "TATASTEEL.NS", "VEDL.NS", "JSWSTEEL.NS", "NMDC.NS", "COALINDIA.NS"],
     "NIFTY BANK": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "INDUSINDBK.NS"],
-    "NIFTY IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS"],
-    "NIFTY ENERGY": ["RELIANCE.NS", "NTPC.NS", "ONGC.NS", "POWERGRID.NS", "TATAPOWER.NS"],
-    "NIFTY AUTO": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS"],
-    "NIFTY PHARMA": ["SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS"],
-    "NIFTY FMCG": ["ITC.NS", "HUL.NS", "NESTLEIND.NS", "BRITANNIA.NS"],
-    "NIFTY INFRA": ["LT.NS", "LICI.NS", "ULTRACEMCO.NS"],
-    "NIFTY REALTY": ["DLF.NS", "GODREJPROP.NS", "MACROTECH.NS"],
-    "NIFTY PSU BANK": ["SBIN.NS", "PNB.NS", "BOB.NS", "CANBK.NS"]
+    "NIFTY IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS"]
 }
-NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", "LTIM.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "UPL.NS", "WIPRO.NS"]
+NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS"]
 ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50))
 
-# 🚨 EXCLUSIVE COINDCX 200+ FUTURES LIST (Removed all other clutter) 🚨
 CRYPTO_SECTORS = {
     "ALL COINDCX FUTURES": [
         "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD",
         "TRX-USD", "MATIC-USD", "AGLD-USD", "BEL-USD", "SNX-USD", "AAVE-USD", "UNI-USD", "NEAR-USD", "APT-USD", "LDO-USD",
         "CRV-USD", "MKR-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD", "LTC-USD", "BCH-USD", "XLM-USD",
-        "ATOM-USD", "HBAR-USD", "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD",
-        "VET-USD", "THETA-USD", "SAND-USD", "MANA-USD", "AXS-USD", "APE-USD", "GALA-USD", "FTM-USD", "DYDX-USD", "SUI-USD",
-        "SEI-USD", "TIA-USD", "ORDI-USD", "FET-USD", "RUNE-USD", "AR-USD", "COMP-USD", "CHZ-USD", "EGLD-USD", "ALGO-USD",
-        "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD", "1INCH-USD", "BAT-USD", "ENJ-USD", "DASH-USD", "ZEC-USD", "NEO-USD",
-        "XMR-USD", "CAKE-USD", "SUSHI-USD", "YFI-USD", "ZIL-USD", "KAVA-USD", "RVN-USD", "WAVES-USD", "IOTX-USD", "ONT-USD",
-        "OMG-USD", "ICX-USD", "ZEN-USD", "CELR-USD", "ONE-USD", "COTI-USD", "CTSI-USD", "LRC-USD", "CVC-USD", "STORJ-USD",
-        "OCEAN-USD", "SXP-USD", "BAND-USD", "RLC-USD", "NMR-USD", "BAL-USD", "TRB-USD", "MDT-USD", "PERL-USD", "OXT-USD",
-        "DENT-USD", "KEY-USD", "STPT-USD", "NKN-USD", "BTS-USD", "LPT-USD", "ARPA-USD", "MTL-USD", "GTC-USD", "ALICE-USD",
-        "SUPER-USD", "LINA-USD", "TKO-USD", "DUSK-USD", "BLZ-USD", "REEF-USD", "CELO-USD", "TOMO-USD", "FRONT-USD", "CTK-USD",
-        "HARD-USD", "UNFI-USD", "FIRO-USD", "LIT-USD", "BETA-USD", "TROY-USD", "POND-USD", "AKRO-USD", "WNXM-USD", "VITE-USD",
-        "DIA-USD", "OAX-USD", "MITH-USD", "DREP-USD", "FOR-USD", "BURGER-USD", "CFX-USD", "SFP-USD", "TWT-USD", "TRU-USD",
-        "DODO-USD", "BAKE-USD", "PSG-USD", "JUV-USD", "ATM-USD", "ASR-USD", "OG-USD", "ACM-USD", "BAR-USD", "CITY-USD",
-        "POR-USD", "LAZIO-USD", "SANTOS-USD", "ALPINE-USD", "PORTO-USD", "MASK-USD", "ATA-USD", "RAD-USD", "LOKA-USD", "IDEX-USD"
+        "ATOM-USD", "HBAR-USD", "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD"
     ]
 }
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist]))
 
-# 🚨 STRICT DECIMAL FORMATTER 🚨
 def fmt_price(val):
     try:
         val = float(val)
@@ -85,9 +67,7 @@ def get_live_data(ticker_symbol):
     try:
         stock = yf.Ticker(ticker_symbol)
         fast = stock.fast_info
-        try:
-            ltp = float(fast.last_price)
-            prev_close = float(fast.previous_close)
+        try: ltp, prev_close = float(fast.last_price), float(fast.previous_close)
         except:
             df = stock.history(period='5d')
             if len(df) >= 2: ltp, prev_close = float(df['Close'].iloc[-1]), float(df['Close'].iloc[-2])
@@ -122,16 +102,13 @@ def get_real_sector_performance(sector_dict, ignore_keys=["MIXED WATCHLIST", "AL
             if pct != 0.0: total_pct += pct; valid += 1
         if valid > 0:
             avg_pct = round(total_pct / valid, 2)
-            bw = min(abs(avg_pct) * 20, 100) 
-            results.append({"Sector": sector, "Pct": avg_pct, "Width": max(bw, 5)})
+            results.append({"Sector": sector, "Pct": avg_pct, "Width": max(min(abs(avg_pct) * 20, 100), 5)})
     return sorted(results, key=lambda x: x['Pct'], reverse=True)
 
 @st.cache_data(ttl=60)
 def get_adv_dec(item_list):
     adv, dec = 0, 0
-    def fetch_chg(ticker):
-        _, change, _ = get_live_data(ticker)
-        return change
+    def fetch_chg(ticker): return get_live_data(ticker)[1]
     with ThreadPoolExecutor(max_workers=30) as executor:
         results = list(executor.map(fetch_chg, item_list))
     for change in results:
@@ -139,7 +116,6 @@ def get_adv_dec(item_list):
         elif change < 0: dec += 1
     return adv, dec
 
-# 🚨 FAST MULTI-THREADED GAINERS/LOSERS SCANNER (Fixes "No Data" issue) 🚨
 @st.cache_data(ttl=120)
 def get_dynamic_market_data(item_list):
     gainers, losers, trends = [], [], []
@@ -166,14 +142,12 @@ def get_dynamic_market_data(item_list):
 
     with ThreadPoolExecutor(max_workers=40) as executor:
         results = list(executor.map(fetch_coin_data, item_list))
-        
     for res in results:
         if res:
             obj, t_status, t_color = res
             if obj['Pct'] > 0: gainers.append(obj)
             elif obj['Pct'] < 0: losers.append(obj)
             if t_status: trends.append({"Stock": obj['Stock'], "Status": t_status, "Color": t_color})
-            
     return sorted(gainers, key=lambda x: x['Pct'], reverse=True)[:5], sorted(losers, key=lambda x: x['Pct'])[:5], trends
 
 @st.cache_data(ttl=60)
@@ -200,7 +174,6 @@ def nse_ha_bb_strategy_5m(stock_list, market_sentiment="BULLISH"):
             
             completed_idx = len(df) - 2
             alert_candle, prev_candle, current_ltp = df.iloc[completed_idx], df.iloc[completed_idx - 1], df['Close'].iloc[-1]
-            
             signal = None
             entry = sl = target_bb = 0.0
             
@@ -245,7 +218,6 @@ def crypto_ha_bb_strategy(crypto_list):
             
             completed_idx = len(df) - 2
             alert_candle, prev_candle, current_ltp = df.iloc[completed_idx], df.iloc[completed_idx - 1], df['Close'].iloc[-1]
-            
             signal = None
             entry = sl = target_bb = 0.0
             buffer = alert_candle['Close'] * 0.001 
@@ -272,7 +244,6 @@ def crypto_ha_bb_strategy(crypto_list):
         if res is not None: signals.append(res)
     return signals
 
-# 🚨 FULLY AUTOMATIC TRADE TRACKER ENGINE 🚨
 def process_auto_trades(live_signals):
     ist_timezone = pytz.timezone('Asia/Kolkata')
     current_time_str = datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M")
@@ -321,6 +292,40 @@ def process_auto_trades(live_signals):
         save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
         save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
 
+# 🚨 COINDCX API EXECUTION ENGINE 🚨
+def place_coindcx_order(market, side, order_type, price, quantity):
+    try:
+        key = st.secrets["DCX_KEY"]
+        secret = st.secrets["DCX_SECRET"]
+    except:
+        return {"error": "API Keys not found in Streamlit Secrets. Please add DCX_KEY and DCX_SECRET."}
+
+    secret_bytes = bytes(secret, 'utf-8')
+    timestamp = int(round(time.time() * 1000))
+    
+    # CoinDCX mapping (BTC-USD -> BTCINR or BTCUSDT based on your preference. Defaulting to USDT pairs for futures)
+    dcx_market = market.replace("-", "").upper() + "T" if "USD" in market else market
+    
+    body = {
+        "side": side.lower(),
+        "order_type": order_type,
+        "market": dcx_market,
+        "price_per_unit": price,
+        "total_quantity": quantity,
+        "timestamp": timestamp
+    }
+    json_body = json.dumps(body, separators=(',', ':'))
+    signature = hmac.new(secret_bytes, json_body.encode(), hashlib.sha256).hexdigest()
+    
+    url = "https://api.coindcx.com/exchange/v1/orders/create"
+    headers = {'X-AUTH-APIKEY': key, 'X-AUTH-SIGNATURE': signature, 'Content-Type': 'application/json'}
+    
+    try:
+        response = requests.post(url, data=json_body, headers=headers)
+        return response.json()
+    except Exception as e:
+        return {"error": str(e)}
+
 # --- 4. CSS ---
 css_string = (
     "<style>"
@@ -339,9 +344,7 @@ css_string = (
     ".adv-dec-container { background: white; border: 1px solid #b0c4de; padding: 10px; margin-bottom: 10px; text-align: center; border-radius: 5px; } "
     ".adv-dec-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin: 8px 0; } "
     ".bar-green { background-color: #2e7d32; } .bar-red { background-color: #d32f2f; } "
-    ".bar-bg { background: #e0e0e0; width: 100%; height: 14px; min-width: 50px; border-radius: 3px; } "
-    ".bar-fg-green { background: #276a44; height: 100%; border-radius: 3px; } "
-    ".bar-fg-red { background: #8b0000; height: 100%; border-radius: 3px; } "
+    ".calc-box { background: white; border: 1px solid #00ffd0; padding: 15px; border-radius: 8px; box-shadow: 0px 2px 8px rgba(0,0,0,0.1); margin-top: 15px;} "
     "</style>"
 )
 st.markdown(css_string, unsafe_allow_html=True)
@@ -358,7 +361,8 @@ with st.sidebar:
         sector_dict = FNO_SECTORS
         all_assets = ALL_STOCKS
     else:
-        menu_options = ["📈 MAIN TERMINAL", "🧮 Futures Risk Calculator", "⚙️ Scanner Settings"]
+        # 🚨 NEW MENU OPTION FOR REAL TRADING & CHARTS 🚨
+        menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE & CHARTS", "🧮 Futures Risk Calculator", "⚙️ Scanner Settings"]
         sector_dict = CRYPTO_SECTORS
         all_assets = ALL_CRYPTO
 
@@ -468,11 +472,9 @@ if page_selection == "📈 MAIN TERMINAL":
             clr = "green" if chg >= 0 else "red"
             sign = "+" if chg >= 0 else ""
             prefix = "₹" if name == "USDINR" else ("$" if market_mode != "🇮🇳 Indian Market (NSE)" else "")
-            
             if name == "USDINR": val_str, chg_str = f"{val:.4f}", f"{chg:.4f}"
             elif market_mode != "🇮🇳 Indian Market (NSE)": val_str, chg_str = fmt_price(val), fmt_price(chg)
             else: val_str, chg_str = f"{val:,.2f}", f"{chg:,.2f}"
-
             indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{chg_str} ({sign}{pct:.2f}%)</span></div>"
         indices_html += "</div>"
         st.markdown(indices_html, unsafe_allow_html=True)
@@ -501,7 +503,7 @@ if page_selection == "📈 MAIN TERMINAL":
             with st.spinner("Scanning 5m HA Charts..."): live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
         else:
             st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL COINDCX FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
-            with st.spinner("Scanning ALL 200+ CoinDCX Futures..."): live_signals = crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
+            with st.spinner("Scanning ALL CoinDCX Futures..."): live_signals = crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
 
         if len(live_signals) > 0:
             sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
@@ -522,27 +524,6 @@ if page_selection == "📈 MAIN TERMINAL":
             st.dataframe(df_active, use_container_width=True)
         else:
             st.info("No trades are currently active. Waiting for LTP to cross Signal Entry...")
-
-        st.markdown("<div class='section-title'>📝 TRADE JOURNAL (MANUAL LOG)</div>", unsafe_allow_html=True)
-        with st.expander("➕ Add New Trade to Journal"):
-            with st.form("journal_form"):
-                j_col1, j_col2, j_col3, j_col4 = st.columns(4)
-                with j_col1: j_asset = st.selectbox("Select Asset", sorted(all_assets))
-                with j_col2: j_signal = st.selectbox("Signal", ["BUY", "SHORT"])
-                with j_col3: j_entry = st.number_input("Entry Price", min_value=0.0, format="%.6f")
-                with j_col4: j_exit = st.number_input("Exit Price", min_value=0.0, format="%.6f")
-                submit_trade = st.form_submit_button("💾 Save Trade")
-                
-                if submit_trade and j_asset != "":
-                    if j_entry > 0 and j_exit > 0:
-                        pnl_pct = ((j_exit - j_entry) / j_entry) * 100 if j_signal == "BUY" else ((j_entry - j_exit) / j_entry) * 100
-                        st.session_state.trade_history.append({
-                            "Date": datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M"),
-                            "Stock": j_asset.upper(), "Signal": j_signal, "Entry": j_entry, "Exit": j_exit,
-                            "Status": "MANUAL ENTRY", "P&L %": round(pnl_pct, 2)
-                        })
-                        save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
-                        st.success("✅ Trade saved!")
 
         st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY (CLOSED TRADES)</div>", unsafe_allow_html=True)
         if len(st.session_state.trade_history) > 0:
@@ -580,10 +561,70 @@ if page_selection == "📈 MAIN TERMINAL":
             st.markdown(l_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>Scanning Market...</p>", unsafe_allow_html=True)
 
-elif page_selection == "⚙️ Scanner Settings":
-    st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Web-Socket Timeout Fix is Active (Meta Refresh) \n\n ✅ Auto-Trade Tracker is Active")
+# ==================== NEW: REAL TRADING & CHARTS SECTION ====================
+elif page_selection == "⚡ REAL TRADE & CHARTS":
+    st.markdown("<div class='section-title'>📈 LIVE CHARTS & REAL EXECUTION (COINDCX)</div>", unsafe_allow_html=True)
+    
+    trade_col1, trade_col2 = st.columns([2.5, 1.5])
+    
+    with trade_col1:
+        # 🚨 TradingView Chart Embed 🚨
+        selected_chart_coin = st.selectbox("Select Coin for Chart:", sorted(ALL_CRYPTO), index=0)
+        # Convert BTC-USD to BINANCE:BTCUSDT for TradingView compatibility
+        tv_symbol = "BINANCE:" + selected_chart_coin.replace("-USD", "USDT")
+        
+        st.markdown(f"""
+        <div class="tradingview-widget-container" style="height:500px;width:100%;">
+          <div id="tradingview_chart" style="height:calc(100% - 32px);width:100%;"></div>
+          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+          <script type="text/javascript">
+          new TradingView.widget(
+          {{
+          "autosize": true,
+          "symbol": "{tv_symbol}",
+          "interval": "60",
+          "timezone": "Asia/Kolkata",
+          "theme": "light",
+          "style": "1",
+          "locale": "en",
+          "enable_publishing": false,
+          "hide_side_toolbar": false,
+          "allow_symbol_change": true,
+          "container_id": "tradingview_chart"
+        }}
+          );
+          </script>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    with trade_col2:
+        st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
+        st.markdown("### ⚡ Execute Order")
+        with st.form("coindcx_order_form"):
+            t_market = st.selectbox("Coin Pair", sorted(ALL_CRYPTO))
+            t_side = st.selectbox("Action", ["BUY", "SELL"])
+            t_type = st.selectbox("Order Type", ["limit_order", "market_order"])
+            t_price = st.number_input("Price (Required for Limit)", min_value=0.0, format="%.6f")
+            t_qty = st.number_input("Quantity", min_value=0.0, format="%.6f")
+            
+            submit_real_trade = st.form_submit_button("🚀 PLACE REAL ORDER")
+            
+            if submit_real_trade:
+                if t_qty <= 0:
+                    st.error("Quantity must be greater than 0.")
+                elif t_type == "limit_order" and t_price <= 0:
+                    st.error("Limit orders require a valid price.")
+                else:
+                    with st.spinner("Placing order on CoinDCX..."):
+                        response = place_coindcx_order(t_market, t_side, t_type, t_price, t_qty)
+                        if "error" in response:
+                            st.error(f"❌ Order Failed: {response['error']}")
+                        else:
+                            st.success(f"✅ Order Successfully Placed! Server Response: {response}")
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.warning("⚠️ WARNING: This panel executes REAL trades using your connected CoinDCX API keys. Ensure 'DCX_KEY' and 'DCX_SECRET' are added securely in Streamlit Cloud Settings.")
 
+# ==================== OTHER SECTIONS ====================
 elif page_selection == "🧮 Futures Risk Calculator":
     st.markdown("<div class='section-title'>🧮 Crypto Futures Risk Calculator</div>", unsafe_allow_html=True)
     st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
@@ -613,3 +654,7 @@ elif page_selection == "🧮 Futures Risk Calculator":
                 st.error(f"**Liquidation Price ⚠️:** ${fmt_price(liq_price)}")
             else: st.warning("Entry and Stop Loss cannot be the same!")
     st.markdown("</div>", unsafe_allow_html=True)
+
+elif page_selection == "⚙️ Scanner Settings":
+    st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
+    st.success("✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Web-Socket Timeout Fix is Active (Meta Refresh) \n\n ✅ Auto-Trade Tracker is Active \n\n ✅ Real Trade Execution Engine is Active")
