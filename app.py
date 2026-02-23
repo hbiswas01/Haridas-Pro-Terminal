@@ -1,55 +1,88 @@
 import streamlit as st
-import requests
+import datetime
+import pytz
+import yfinance as yf
 import pandas as pd
-from streamlit_autorefresh import st_autorefresh
+import time
+import urllib.request
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor
+import os
+import requests
 
-# --- CoinDCX API তথ্য (Streamlit Secrets থেকে নেওয়া) ---
-# নিশ্চিত করুন যে আপনি Streamlit Cloud-এর Secrets সেকশনে এগুলো সেভ করেছেন
-try:
-    COINDCX_API_KEY = st.secrets["COINDCX_API_KEY"]
-    COINDCX_SECRET = st.secrets["COINDCX_SECRET"]
-except:
-    st.error("🚨 API Keys not found in Streamlit Secrets!")
+# --- 1. Page Configuration ---
+st.set_page_config(layout="wide", page_title="Haridas Master Terminal", initial_sidebar_state="expanded")
 
-# --- CoinDCX রিয়েল-টাইম ডেটা ইঞ্জিন ---
+# --- 2. CoinDCX API Logic (New & Optimized) ---
 @st.cache_data(ttl=5)
 def get_coindcx_live_prices():
-    """
-    সরাসরি CoinDCX পাবলিক টিকার থেকে সব কয়েনের লাইভ প্রাইস নিয়ে আসে।
-    এটি yfinance এর তুলনায় অনেক বেশি ফাস্ট।
-    """
     url = "https://public.coindcx.com/market_data/ticker"
     try:
         response = requests.get(url, timeout=5)
-        data = response.json()
-        return data
-    except Exception as e:
+        return response.json()
+    except:
         return []
 
 def get_crypto_price_v2(data, market_pair):
-    """
-    CoinDCX এর পেয়ার ফরম্যাট অনুযায়ী প্রাইস খুঁজে বের করে।
-    উদাহরণ: 'B-BTC_USDT'
-    """
     ticker = next((item for item in data if item["market"] == market_pair), None)
     if ticker:
+        # last_price এবং change_24h রিটার্ন করছে
         return float(ticker['last_price']), float(ticker.get('change_24h', 0.0))
     return 0.0, 0.0
 
-# --- আপনার মেইন টার্মিনালের ইনডেক্স সেকশন আপডেট ---
-# কোডের ভেতরে যেখানে Crypto Indices দেখানো হয়েছে, সেখানে নিচের লজিকটি বসান:
+# --- AUTO-SAVE DATABASE SETUP ---
+ACTIVE_TRADES_FILE = "active_trades.csv"
+HISTORY_TRADES_FILE = "trade_history.csv"
 
-if market_mode != "🇮🇳 Indian Market (NSE)":
-    live_crypto_data = get_coindcx_live_prices()
-    
-    # আপনার পছন্দের কয়েনগুলোর জন্য ডেটা নেওয়া
-    btc_ltp, btc_chg = get_crypto_price_v2(live_crypto_data, "B-BTC_USDT")
-    eth_ltp, eth_chg = get_crypto_price_v2(live_crypto_data, "B-ETH_USDT")
-    sol_ltp, sol_chg = get_crypto_price_v2(live_crypto_data, "B-SOL_USDT")
-    
-    # ইন্ডেক্স বক্সে দেখানোর জন্য লিস্ট তৈরি
-    indices = [
-        ("BITCOIN", btc_ltp, (btc_ltp * btc_chg / 100) if btc_chg else 0, btc_chg),
-        ("ETHEREUM", eth_ltp, (eth_ltp * eth_chg / 100) if eth_chg else 0, eth_chg),
-        ("SOLANA", sol_ltp, (sol_ltp * sol_chg / 100) if sol_chg else 0, sol_chg)
-    ]
+def load_data(file_name):
+    if os.path.exists(file_name):
+        try: return pd.read_csv(file_name).to_dict('records')
+        except: return []
+    return []
+
+def save_data(data, file_name):
+    pd.DataFrame(data).to_csv(file_name, index=False)
+
+if 'active_trades' not in st.session_state:
+    st.session_state.active_trades = load_data(ACTIVE_TRADES_FILE)
+if 'trade_history' not in st.session_state:
+    st.session_state.trade_history = load_data(HISTORY_TRADES_FILE)
+
+# --- 3. Sidebar & Market Toggle (Moved up to fix NameError) ---
+with st.sidebar:
+    st.markdown("### 🌍 SELECT MARKET")
+    # এখানেই market_mode তৈরি হচ্ছে, তাই এর নিচে এখন যেকোনো জায়গায় এটি ব্যবহার করা যাবে
+    market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
+    st.divider()
+
+# --- 4. Market Data Dictionary ---
+FNO_SECTORS = {
+    "MIXED WATCHLIST": ["HINDALCO.NS", "NTPC.NS", "WIPRO.NS", "RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "INFY.NS", "ITC.NS", "SBIN.NS", "BHARTIARTL.NS"],
+    "NIFTY METAL": ["HINDALCO.NS", "TATASTEEL.NS", "VEDL.NS", "JSWSTEEL.NS", "NMDC.NS", "COALINDIA.NS"],
+    "NIFTY BANK": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "INDUSINDBK.NS"],
+    "NIFTY IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS"],
+    "NIFTY ENERGY": ["RELIANCE.NS", "NTPC.NS", "ONGC.NS", "POWERGRID.NS", "TATAPOWER.NS"],
+    "NIFTY AUTO": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS"],
+    "NIFTY PHARMA": ["SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS"],
+    "NIFTY FMCG": ["ITC.NS", "HUL.NS", "NESTLEIND.NS", "BRITANNIA.NS"],
+    "NIFTY INFRA": ["LT.NS", "LICI.NS", "ULTRACEMCO.NS"],
+    "NIFTY REALTY": ["DLF.NS", "GODREJPROP.NS", "MACROTECH.NS"],
+    "NIFTY PSU BANK": ["SBIN.NS", "PNB.NS", "BOB.NS", "CANBK.NS"]
+}
+
+CRYPTO_SECTORS = {
+    "TOP WATCHLIST": ["B-BTC_USDT", "B-ETH_USDT", "B-SOL_USDT", "B-BNB_USDT", "B-XRP_USDT", "B-DOGE_USDT"]
+}
+
+# --- 5. Logic for Page Selection ---
+if market_mode == "🇮🇳 Indian Market (NSE)":
+    menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup"]
+    sector_dict = FNO_SECTORS
+else:
+    menu_options = ["📈 MAIN TERMINAL", "🚀 24H Crypto Movers", "🔥 Volume Spikes & OI"]
+    sector_dict = CRYPTO_SECTORS
+
+# --- আপনার বাকি সব ফাংশন (fmt_price, get_live_data, etc.) নিচে থাকবে ---
+# ... (বাকি কোড আপনার আগের মতোই কাজ করবে) ...
+
+st.write(f"Selected Mode: {market_mode}") # এখন আর এরর আসবে না
