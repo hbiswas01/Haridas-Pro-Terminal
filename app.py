@@ -37,12 +37,34 @@ FNO_SECTORS = {
     "NIFTY BANK": ["HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "AXISBANK.NS", "KOTAKBANK.NS", "INDUSINDBK.NS"],
     "NIFTY IT": ["TCS.NS", "INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "LTIM.NS"],
     "NIFTY ENERGY": ["RELIANCE.NS", "NTPC.NS", "ONGC.NS", "POWERGRID.NS", "TATAPOWER.NS"],
-    "NIFTY AUTO": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS"]
+    "NIFTY AUTO": ["MARUTI.NS", "TATAMOTORS.NS", "M&M.NS", "BAJAJ-AUTO.NS", "HEROMOTOCO.NS"],
+    "NIFTY PHARMA": ["SUNPHARMA.NS", "DRREDDY.NS", "CIPLA.NS", "DIVISLAB.NS"],
+    "NIFTY FMCG": ["ITC.NS", "HUL.NS", "NESTLEIND.NS", "BRITANNIA.NS"],
+    "NIFTY INFRA": ["LT.NS", "LICI.NS", "ULTRACEMCO.NS"],
+    "NIFTY REALTY": ["DLF.NS", "GODREJPROP.NS", "MACROTECH.NS"],
+    "NIFTY PSU BANK": ["SBIN.NS", "PNB.NS", "BOB.NS", "CANBK.NS"]
 }
-ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist]))
+
+NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", "LTIM.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "UPL.NS", "WIPRO.NS"]
+NIFTY_NEXT_50 = ["ABB.NS", "ADANIENSOL.NS", "ADANIGREEN.NS", "AMBUJACEM.NS", "DMART.NS", "BAJAJHLDNG.NS", "BANKBARODA.NS", "BEL.NS", "BOSCHLTD.NS", "CANBK.NS", "CHOLAFIN.NS", "CGPOWER.NS", "COLPAL.NS", "DLF.NS", "DABUR.NS", "GAIL.NS", "GODREJCP.NS", "HAL.NS", "HAVELLS.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "ICICIGI.NS", "ICICIPRULI.NS", "IDBI.NS", "INDIGO.NS", "IOC.NS", "IRFC.NS", "JINDALSTEL.NS", "JIOFIN.NS", "LODHA.NS", "MARICO.NS", "MUTHOOTFIN.NS", "NAUKRI.NS", "PIDILITIND.NS", "PFC.NS", "PNB.NS", "RECLTD.NS", "SRF.NS", "MOTHERSON.NS", "SHREECEM.NS", "SIEMENS.NS", "TVSMOTOR.NS", "TORNTPHARM.NS", "TRENT.NS", "UBL.NS", "MCDOWELL-N.NS", "VBL.NS", "VEDL.NS", "ZOMATO.NS", "ZYDUSLIFE.NS"]
+ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50 + NIFTY_NEXT_50))
 
 CRYPTO_SECTORS = {
-    "ALL COINDCX FUTURES": ["BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD", "TRX-USD", "MATIC-USD", "AGLD-USD", "BEL-USD", "SNX-USD", "AAVE-USD", "UNI-USD", "NEAR-USD", "APT-USD", "LDO-USD", "CRV-USD", "MKR-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD"]
+    "ALL COINDCX FUTURES": [
+        "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD",
+        "LINK-USD", "DOT-USD", "TRX-USD", "MATIC-USD", "AGLD-USD", "BEL-USD", "SNX-USD", "AAVE-USD",
+        "UNI-USD", "NEAR-USD", "APT-USD", "LDO-USD", "CRV-USD", "MKR-USD", "SHIB-USD", "PEPE-USD",
+        "WIF-USD", "FLOKI-USD", "BONK-USD", "LTC-USD", "BCH-USD", "XLM-USD", "ATOM-USD", "HBAR-USD",
+        "ETC-USD", "FIL-USD", "INJ-USD", "OP-USD", "RNDR-USD", "IMX-USD", "STX-USD", "GRT-USD",
+        "VET-USD", "THETA-USD", "SAND-USD", "MANA-USD", "AXS-USD", "APE-USD", "GALA-USD", "FTM-USD",
+        "DYDX-USD", "SUI-USD", "SEI-USD", "TIA-USD", "ORDI-USD", "FET-USD", "RUNE-USD", "AR-USD",
+        "COMP-USD", "CHZ-USD", "EGLD-USD", "ALGO-USD", "ICP-USD", "QNT-USD", "ROSE-USD", "ARDR-USD"
+    ],
+    "TOP WATCHLIST": ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD"],
+    "LAYER 1": ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "AVAX-USD", "DOT-USD", "NEAR-USD"],
+    "MEME COINS": ["DOGE-USD", "SHIB-USD", "PEPE-USD", "WIF-USD", "FLOKI-USD", "BONK-USD"],
+    "DEFI & WEB3": ["LINK-USD", "UNI-USD", "AAVE-USD", "CRV-USD", "MKR-USD", "LDO-USD", "AGLD-USD", "BEL-USD"],
+    "ALTCOINS": ["XRP-USD", "TRX-USD", "MATIC-USD", "LTC-USD", "BCH-USD", "XLM-USD", "APT-USD", "SNX-USD"]
 }
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist]))
 
@@ -82,6 +104,24 @@ def get_market_news():
     return "📰 LIVE MARKET NEWS: Fetching latest feeds... 🔹"
 
 @st.cache_data(ttl=60)
+def get_real_sector_performance(sector_dict, ignore_keys=["MIXED WATCHLIST", "TOP WATCHLIST", "ALL COINDCX FUTURES"]):
+    results = []
+    for sector, items in sector_dict.items():
+        if sector in ignore_keys: continue
+        total_pct = 0
+        valid = 0
+        for ticker in items:
+            _, _, pct = get_live_data(ticker)
+            if pct != 0.0:
+                total_pct += pct
+                valid += 1
+        if valid > 0:
+            avg_pct = round(total_pct / valid, 2)
+            bw = min(abs(avg_pct) * 20, 100) 
+            results.append({"Sector": sector, "Pct": avg_pct, "Width": max(bw, 5)})
+    return sorted(results, key=lambda x: x['Pct'], reverse=True)
+
+@st.cache_data(ttl=60)
 def get_adv_dec(item_list):
     adv, dec = 0, 0
     def fetch_chg(ticker):
@@ -93,6 +133,51 @@ def get_adv_dec(item_list):
         if change > 0: adv += 1
         elif change < 0: dec += 1
     return adv, dec
+
+@st.cache_data(ttl=120)
+def get_dynamic_market_data(item_list):
+    gainers, losers, trends = [], [], []
+    for ticker in item_list:
+        try:
+            df = yf.Ticker(ticker).history(period="10d")
+            if len(df) >= 3:
+                c1, o1 = df['Close'].iloc[-1], df['Open'].iloc[-1]
+                c2, o2 = df['Close'].iloc[-2], df['Open'].iloc[-2]
+                c3, o3 = df['Close'].iloc[-3], df['Open'].iloc[-3]
+                
+                if c2 == 0 or pd.isna(c1): continue
+                
+                pct_chg = ((c1 - c2) / c2) * 100
+                obj = {"Stock": ticker, "LTP": float(c1), "Pct": round(pct_chg, 2)}
+                
+                if pct_chg > 0: gainers.append(obj)
+                elif pct_chg < 0: losers.append(obj)
+                if c1 > o1 and c2 > o2 and c3 > o3: trends.append({"Stock": ticker, "Status": "৩ দিন উত্থান", "Color": "green"})
+                elif c1 < o1 and c2 < o2 and c3 < o3: trends.append({"Stock": ticker, "Status": "৩ দিন পতন", "Color": "red"})
+        except: pass
+    return sorted(gainers, key=lambda x: x['Pct'], reverse=True)[:5], sorted(losers, key=lambda x: x['Pct'])[:5], trends
+
+@st.cache_data(ttl=60)
+def get_oi_simulation(item_list):
+    setups = []
+    for ticker in item_list:
+        try:
+            df = yf.Ticker(ticker).history(period="2d", interval="15m")
+            if len(df) >= 3:
+                c1, v1 = df['Close'].iloc[-1], df['Volume'].iloc[-1]
+                c2, v2 = df['Close'].iloc[-2], df['Volume'].iloc[-2]
+                c3 = df['Close'].iloc[-3]
+                if v1 > (v2 * 1.5):
+                    oi_status = "🔥 High (Spike)"
+                    if c1 > c2:
+                        signal = "Short Covering 🚀" if c2 < c3 else "Long Buildup 📈"
+                        color = "green"
+                    else:
+                        signal = "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉"
+                        color = "red"
+                    setups.append({"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color})
+        except: pass
+    return setups
 
 @st.cache_data(ttl=60)
 def nse_ha_bb_strategy_5m(stock_list, market_sentiment="BULLISH"):
@@ -210,6 +295,15 @@ def crypto_ha_bb_strategy(crypto_list):
         if res is not None: signals.append(res)
     return signals
 
+@st.cache_data(ttl=60)
+def get_opening_movers(stock_list):
+    movers = []
+    for ticker in stock_list:
+        ltp, _, pct = get_live_data(ticker)
+        if abs(pct) >= 2.0:
+            movers.append({"Stock": ticker, "LTP": ltp, "Pct": pct})
+    return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
+
 # 🚨 AUTOMATIC TRADE TRACKER ENGINE 🚨
 def process_auto_trades(live_signals):
     ist_timezone = pytz.timezone('Asia/Kolkata')
@@ -217,7 +311,6 @@ def process_auto_trades(live_signals):
     
     active_stocks = [t['Stock'] for t in st.session_state.active_trades]
 
-    # 1. Add new triggered signals to Active Trades
     for sig in live_signals:
         if sig['Stock'] not in active_stocks:
             is_triggered = False
@@ -232,7 +325,6 @@ def process_auto_trades(live_signals):
                 st.session_state.active_trades.append(new_trade)
                 save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
 
-    # 2. Check Active Trades for SL or Target Hit
     trades_to_remove = []
     for trade in st.session_state.active_trades:
         ltp, _, _ = get_live_data(trade['Stock'])
@@ -258,7 +350,6 @@ def process_auto_trades(live_signals):
             st.session_state.trade_history.append(completed_trade)
             trades_to_remove.append(trade)
 
-    # 3. Clean up active trades and save
     if trades_to_remove:
         st.session_state.active_trades = [t for t in st.session_state.active_trades if t not in trades_to_remove]
         save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
@@ -285,6 +376,7 @@ css_string = (
     ".bar-bg { background: #e0e0e0; width: 100%; height: 14px; min-width: 50px; border-radius: 3px; } "
     ".bar-fg-green { background: #276a44; height: 100%; border-radius: 3px; } "
     ".bar-fg-red { background: #8b0000; height: 100%; border-radius: 3px; } "
+    ".calc-box { background: white; border: 1px solid #00ffd0; padding: 15px; border-radius: 8px; box-shadow: 0px 2px 8px rgba(0,0,0,0.1); margin-top: 15px;} "
     "</style>"
 )
 st.markdown(css_string, unsafe_allow_html=True)
@@ -297,11 +389,11 @@ with st.sidebar:
     
     st.markdown("### 🎛️ HARIDAS DASHBOARD")
     if market_mode == "🇮🇳 Indian Market (NSE)":
-        menu_options = ["📈 MAIN TERMINAL", "⚙️ Scanner Settings"]
+        menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "⚙️ Scanner Settings", "📊 Backtest Engine"]
         sector_dict = FNO_SECTORS
         all_assets = ALL_STOCKS
     else:
-        menu_options = ["📈 MAIN TERMINAL", "🧮 Futures Risk Calculator"]
+        menu_options = ["📈 MAIN TERMINAL", "🚀 24H Crypto Movers", "🔥 Volume Spikes & OI", "🧮 Futures Risk Calculator", "⚙️ Scanner Settings", "📊 Backtest Engine"]
         sector_dict = CRYPTO_SECTORS
         all_assets = ALL_CRYPTO
 
@@ -358,26 +450,64 @@ st.markdown(nav_html, unsafe_allow_html=True)
 
 # ==================== MAIN TERMINAL ====================
 if page_selection == "📈 MAIN TERMINAL":
-    col1, col2 = st.columns([1, 2.5])
+    
+    # 🚨 3-COLUMN LAYOUT RESTORED HERE 🚨
+    col1, col2, col3 = st.columns([1, 2.8, 1])
 
-    # --- COLUMN 1 (MARKET INDICES) ---
+    # --- COLUMN 1 (SECTORS & TRENDS) ---
     with col1:
-        st.markdown("<div class='section-title'>📉 MARKET INDICES</div>", unsafe_allow_html=True)
+        title = "📊 SECTOR PERFORMANCE" if market_mode == "🇮🇳 Indian Market (NSE)" else "📊 CRYPTO CATEGORIES"
+        st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+        with st.spinner("Fetching Live Sectors..."):
+            real_sectors = get_real_sector_performance(sector_dict)
+        if real_sectors:
+            sec_html = "<div class='table-container'><table class='v38-table'><tr><th>Category</th><th>Avg %</th><th style='width:40%;'>Trend</th></tr>"
+            for s in real_sectors:
+                c = "green" if s['Pct'] >= 0 else "red"
+                bc = "bar-fg-green" if s['Pct'] >= 0 else "bar-fg-red"
+                sec_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{s['Sector']}</td><td style='color:{c}; font-weight:bold;'>{s['Pct']}%</td><td style='padding:4px 8px;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></td></tr>"
+            sec_html += "</table></div>"
+            st.markdown(sec_html, unsafe_allow_html=True)
+
+        with st.spinner("Fetching Live Market Movers & Trends..."):
+            gainers, losers, trends = get_dynamic_market_data(all_assets)
+
+        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (3+ Days)</div>", unsafe_allow_html=True)
+        if trends:
+            t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
+            for t in trends: t_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
+            t_html += "</table></div>"
+            st.markdown(t_html, unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found.</p>", unsafe_allow_html=True)
+
+    # --- COLUMN 2 (INDICES, ADV/DEC, SIGNALS, AUTO-JOURNAL) ---
+    with col2:
+        st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
+        
         if market_mode == "🇮🇳 Indian Market (NSE)":
-            p1_ltp, p1_chg, p1_pct = get_live_data("^NSEI")
-            p2_ltp, p2_chg, p2_pct = get_live_data("^NSEBANK")
-            indices = [("Nifty 50", p1_ltp, p1_chg, p1_pct), ("Nifty Bank", p2_ltp, p2_chg, p2_pct)]
+            p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN")
+            p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI")
+            p3_ltp, p3_chg, p3_pct = get_live_data("INR=X")
+            p4_ltp, p4_chg, p4_pct = get_live_data("^NSEBANK")
+            p5_ltp, p5_chg, p5_pct = get_live_data("^CRSMY")
+            p6_ltp, p6_chg, p6_pct = get_live_data("^CRSLDX")
+            indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Nifty Mid100", p5_ltp, p5_chg, p5_pct), ("Nifty Small100", p6_ltp, p6_chg, p6_pct)]
         else:
             p1_ltp, p1_chg, p1_pct = get_live_data("BTC-USD")
             p2_ltp, p2_chg, p2_pct = get_live_data("ETH-USD")
-            indices = [("BITCOIN", p1_ltp, p1_chg, p1_pct), ("ETHEREUM", p2_ltp, p2_chg, p2_pct)]
+            p3_ltp, p3_chg, p3_pct = get_live_data("SOL-USD")
+            p4_ltp, p4_chg, p4_pct = get_live_data("BNB-USD")
+            p5_ltp, p5_chg, p5_pct = get_live_data("XRP-USD")
+            p6_ltp, p6_chg, p6_pct = get_live_data("DOGE-USD")
+            indices = [("BITCOIN", p1_ltp, p1_chg, p1_pct), ("ETHEREUM", p2_ltp, p2_chg, p2_pct), ("SOLANA", p3_ltp, p3_chg, p3_pct), ("BINANCE COIN", p4_ltp, p4_chg, p4_pct), ("RIPPLE", p5_ltp, p5_chg, p5_pct), ("DOGECOIN", p6_ltp, p6_chg, p6_pct)]
 
         indices_html = "<div class='idx-container'>"
         for name, val, chg, pct in indices:
             clr = "green" if chg >= 0 else "red"
             sign = "+" if chg >= 0 else ""
-            prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
-            indices_html += f"<div class='idx-box' style='width:48%;'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{fmt_price(val)}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{fmt_price(chg)} ({sign}{pct:.2f}%)</span></div>"
+            prefix = "₹" if name == "USDINR" else ("$" if market_mode != "🇮🇳 Indian Market (NSE)" else "")
+            val_str = f"{val:,.6f}".rstrip('0').rstrip('.') if val < 1 else f"{val:,.2f}"
+            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{fmt_price(chg)} ({sign}{pct:.2f}%)</span></div>"
         indices_html += "</div>"
         st.markdown(indices_html, unsafe_allow_html=True)
 
@@ -400,8 +530,6 @@ if page_selection == "📈 MAIN TERMINAL":
         )
         st.markdown(adv_dec_html, unsafe_allow_html=True)
 
-    # --- COLUMN 2 (SIGNALS & AUTO JOURNAL) ---
-    with col2:
         # 1. Fetch & Display Live Signals
         if market_mode == "🇮🇳 Indian Market (NSE)":
             st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector} (5M HA+BB)</div>", unsafe_allow_html=True)
@@ -442,11 +570,132 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("No closed trades yet. Once an Active Trade hits SL or Target, it will permanently save here.")
 
-elif page_selection == "⚙️ Scanner Settings":
-    st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Web-Socket Timeout Fix is Active (Meta Refresh) \n\n ✅ Auto-Trade Tracker is Active")
+    # --- COLUMN 3 (GAINERS & LOSERS RESTORED) ---
+    with col3:
+        st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS</div>", unsafe_allow_html=True)
+        if gainers:
+            g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
+            for g in gainers: 
+                prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
+                g_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{g['Stock']}</td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
+            g_html += "</table></div>"
+            st.markdown(g_html, unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
+
+        st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS</div>", unsafe_allow_html=True)
+        if losers:
+            l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
+            for l in losers: 
+                prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
+                l_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{l['Stock']}</td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
+            l_html += "</table></div>"
+            st.markdown(l_html, unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
+
+# ==================== OTHER SECTIONS ====================
+elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🚀 24H Crypto Movers"]:
+    st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
+    with st.spinner("Scanning ALL Assets..."):
+        movers = get_opening_movers(all_assets)
+    if movers:
+        m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock / Coin</th><th>LTP</th><th>Movement %</th></tr>"
+        for m in movers: 
+            c = "green" if m['Pct'] > 0 else "red"
+            m_html += f"<tr><td style='font-weight:bold;'>{m['Stock']}</td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
+        m_html += "</table></div>"
+        st.markdown(m_html, unsafe_allow_html=True)
+    else: st.info("No significant movement found based on live data.")
+
+elif page_selection in ["🔥 9:20 AM: OI Setup", "🔥 Volume Spikes & OI"]:
+    st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
+    with st.spinner("Scanning for Volume Spikes & OI Proxy..."):
+        oi_setups = get_oi_simulation(all_assets)
+    if oi_setups:
+        oi_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Market Action (Signal)</th><th>OI / Vol Status</th></tr>"
+        for o in oi_setups: 
+            oi_html += f"<tr><td style='font-weight:bold;'>{o['Stock']}</td><td style='color:{o['Color']}; font-weight:bold;'>{o['Signal']}</td><td style='color:#1a73e8; font-weight:bold;'>{o['OI']}</td></tr>"
+        oi_html += "</table></div>"
+        st.markdown(oi_html, unsafe_allow_html=True)
+    else: st.info("No significant real volume/OI spikes detected.")
 
 elif page_selection == "🧮 Futures Risk Calculator":
     st.markdown("<div class='section-title'>🧮 Crypto Futures Risk Calculator</div>", unsafe_allow_html=True)
-    # Same calculator logic as previous...
-    st.info("Risk Calculator is active.")
+    st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
+    calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
+    with calc_col1:
+        trade_type = st.selectbox("Trade Direction", ["LONG (Buy)", "SHORT (Sell)"])
+        capital = st.number_input("Total Capital (USDT)", min_value=1.0, value=100.0, step=10.0)
+    with calc_col2:
+        entry_price = st.number_input("Entry Price (USDT)", min_value=0.000001, value=65000.0, step=10.0, format="%.6f")
+        leverage = st.slider("Leverage (x)", min_value=1, max_value=100, value=10)
+    with calc_col3:
+        stop_loss = st.number_input("Stop Loss (USDT)", min_value=0.000001, value=64000.0, step=10.0, format="%.6f")
+        risk_pct = st.number_input("Risk % per Trade", min_value=0.1, max_value=100.0, value=2.0, step=0.5)
+    with calc_col4:
+        st.write("")
+        st.write("")
+        if st.button("🚀 Calculate Risk", use_container_width=True):
+            price_diff = abs(entry_price - stop_loss)
+            if price_diff > 0:
+                risk_amt = capital * (risk_pct / 100)
+                pos_size_coin = risk_amt / price_diff
+                pos_size_usdt = pos_size_coin * entry_price
+                margin_required = pos_size_usdt / leverage
+                liq_price = entry_price * (1 - (1/leverage)) if trade_type == "LONG (Buy)" else entry_price * (1 + (1/leverage))
+                st.success(f"**Margin Needed:** ${margin_required:.2f}")
+                st.info(f"**Position Size:** {fmt_price(pos_size_coin)} Coins (${pos_size_usdt:.2f})")
+                st.error(f"**Liquidation Price ⚠️:** ${fmt_price(liq_price)}")
+            else: st.warning("Entry and Stop Loss cannot be the same!")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+elif page_selection == "⚙️ Scanner Settings":
+    st.markdown("<div class='section-title'>⚙️ Scanner Settings</div>", unsafe_allow_html=True)
+    st.success("Your terminal is fully integrated. PURE LIVE data mode is active with dynamic decimal formatting.")
+
+elif page_selection == "📊 Backtest Engine":
+    st.markdown("<div class='section-title'>📊 Backtest Engine (Real Historical Data)</div>", unsafe_allow_html=True)
+    bt_col1, bt_col2 = st.columns(2)
+    with bt_col1:
+        bt_stock = st.selectbox("Select Asset to Backtest:", sorted(all_assets), index=0)
+    with bt_col2:
+        bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
+
+    if st.button("🚀 Run Backtest", use_container_width=True):
+        with st.spinner(f"Fetching {bt_period} historical data for {bt_stock}..."):
+            try:
+                bt_data = yf.Ticker(bt_stock).history(period=bt_period)
+                if len(bt_data) > 3:
+                    trades = []
+                    for i in range(3, len(bt_data)):
+                        c1, o1 = bt_data['Close'].iloc[i-1], bt_data['Open'].iloc[i-1]
+                        c2, o2 = bt_data['Close'].iloc[i-2], bt_data['Open'].iloc[i-2]
+                        c3, o3 = bt_data['Close'].iloc[i-3], bt_data['Open'].iloc[i-3]
+
+                        if c1 > o1 and c2 > o2 and c3 > o3:
+                            entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
+                            if entry_price > 0:
+                                pnl = ((entry_price - exit_price) / entry_price) * 100
+                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days GREEN", "Signal": "SHORT", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
+                        
+                        elif c1 < o1 and c2 < o2 and c3 < o3:
+                            entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
+                            if entry_price > 0:
+                                pnl = ((exit_price - entry_price) / entry_price) * 100
+                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days RED", "Signal": "BUY", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
+
+                    bt_df = pd.DataFrame(trades)
+                    if not bt_df.empty:
+                        st.success(f"✅ Backtest completed for {bt_stock}. Found {len(bt_df)} setups.")
+                        total_pnl = bt_df['P&L %'].sum()
+                        win_rate = (len(bt_df[bt_df['P&L %'] > 0]) / len(bt_df)) * 100
+                        m_col1, m_col2, m_col3 = st.columns(3)
+                        m_col1.metric("Total Trades", len(bt_df))
+                        m_col2.metric("Win Rate", f"{win_rate:.2f}%")
+                        m_col3.metric("Total Strategy P&L %", f"{total_pnl:.2f}%", delta=f"{total_pnl:.2f}%")
+                        st.dataframe(bt_df, use_container_width=True)
+                    else: st.info(f"No valid setups found for {bt_stock} in the last {bt_period}.")
+            except Exception as e: st.error(f"Error fetching data: {e}")
+
+if auto_refresh:
+    time.sleep(refresh_time * 60)
+    st.rerun()
