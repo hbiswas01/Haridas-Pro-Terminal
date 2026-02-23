@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 import pytz
 import yfinance as yf
@@ -50,7 +51,6 @@ FNO_SECTORS = {
 NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", "LTIM.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "UPL.NS", "WIPRO.NS"]
 ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50))
 
-# 🚨 MEGA COINDCX FUTURES LIST (Added PIPPIN, FARTCOIN, GIGGLE, etc from your screenshots) 🚨
 CRYPTO_SECTORS = {
     "ALL COINDCX FUTURES": [
         "BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD",
@@ -76,9 +76,18 @@ def fmt_price(val):
         else: return f"{val:,.2f}"
     except: return "0.00"
 
-# --- 3. HELPER FUNCTIONS (100% Legal & Unblocked Yahoo Engine) ---
+# --- 3. HELPER FUNCTIONS (Hybrid Speed Engine) ---
 @st.cache_data(ttl=30)
 def get_live_data(ticker_symbol):
+    # 🚨 Fast Binance Public API for Crypto (Matches CoinDCX exactly) 🚨
+    if "-USD" in ticker_symbol:
+        try:
+            symbol = ticker_symbol.replace("-USD", "USDT")
+            url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+            res = requests.get(url, timeout=2).json()
+            return float(res['lastPrice']), float(res['priceChange']), float(res['priceChangePercent'])
+        except: pass # Fallback to Yahoo below if blocked
+        
     try:
         stock = yf.Ticker(ticker_symbol)
         fast = stock.fast_info
@@ -344,7 +353,6 @@ def place_coindcx_order(market, side, order_type, price, quantity):
     except: return {"error": "API Keys not found in Streamlit Secrets."}
     secret_bytes = bytes(secret, 'utf-8')
     timestamp = int(round(time.time() * 1000))
-    # Correct Mapping for DCX Futures (E.g. BTC-USD -> B-BTC_USDT)
     dcx_market = f"B-{market.replace('-USD', '_USDT')}"
     
     body = {"side": side.lower(), "order_type": order_type, "market": dcx_market, "price_per_unit": price, "total_quantity": quantity, "timestamp": timestamp}
@@ -455,12 +463,12 @@ if page_selection == "📈 MAIN TERMINAL":
 
     process_auto_trades(live_signals)
 
-    # Filtering strictly to selected watchlist + active signals
-    signal_stocks = [s['Stock'] for s in live_signals]
-    focused_scan_list = list(set(current_watchlist + signal_stocks))
-
     with st.spinner("Fetching Market Movers & Trends for Watchlist..."):
-        gainers, losers, trends = get_dynamic_market_data(focused_scan_list)
+        gainers, losers, trends = get_dynamic_market_data(current_watchlist)
+
+    # 🚨 FILTER: Only show Trend Continuity for Important Stocks (Signals + Gainers/Losers) 🚨
+    important_assets = [s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers]
+    filtered_trends = [t for t in trends if t['Stock'] in important_assets]
 
     col1, col2, col3 = st.columns([1, 2.8, 1])
 
@@ -477,10 +485,10 @@ if page_selection == "📈 MAIN TERMINAL":
                 sec_html += "</table></div>"
                 st.markdown(sec_html, unsafe_allow_html=True)
 
-        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (Selected List)</div>", unsafe_allow_html=True)
-        if trends:
+        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (IMPORTANT LIST)</div>", unsafe_allow_html=True)
+        if filtered_trends:
             t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
-            for t in trends: t_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
+            for t in filtered_trends: t_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
             t_html += "</table></div>"
             st.markdown(t_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found in active list.</p>", unsafe_allow_html=True)
@@ -552,21 +560,21 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("⏳ No fresh signals right now.")
 
-        # 🚨 QUICK CHART VIEWER RIGHT ON HOME PAGE 🚨
+        # 🚨 FIX: QUICK CHART VIEWER USING COMPONENTS (Fixes white screen issue) 🚨
         st.markdown("<div class='section-title'>📈 QUICK CHART VIEWER</div>", unsafe_allow_html=True)
         tv_asset = st.selectbox("Select Asset to view live chart:", sorted(all_assets))
         
-        if market_mode == "🇮🇳 Indian Market (NSE)": tv_symbol = "NSE:" + tv_asset.replace(".NS", "")
-        else: tv_symbol = "BINANCE:" + tv_asset.replace("-USD", "USDT")
-            
-        st.markdown(f"""
-        <div class="tradingview-widget-container" style="height:400px;width:100%; border: 1px solid #ddd; border-radius: 5px;">
-          <div id="tradingview_home_chart" style="height:calc(100% - 32px);width:100%;"></div>
+        tv_symbol = "NSE:" + tv_asset.replace(".NS", "") if market_mode == "🇮🇳 Indian Market (NSE)" else "BINANCE:" + tv_asset.replace("-USD", "USDT")
+        
+        widget_html = f"""
+        <div class="tradingview-widget-container">
+          <div id="tradingview_chart_xyz"></div>
           <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
           <script type="text/javascript">
           new TradingView.widget(
           {{
-          "autosize": true,
+          "width": "100%",
+          "height": 400,
           "symbol": "{tv_symbol}",
           "interval": "60",
           "timezone": "Asia/Kolkata",
@@ -576,30 +584,35 @@ if page_selection == "📈 MAIN TERMINAL":
           "enable_publishing": false,
           "hide_side_toolbar": false,
           "allow_symbol_change": true,
-          "container_id": "tradingview_home_chart"
+          "container_id": "tradingview_chart_xyz"
         }}
           );
           </script>
         </div>
-        """, unsafe_allow_html=True)
+        """
+        components.html(widget_html, height=400)
+
+        # 🚨 FIX: MARKET SEGREGATION FOR TRADES (Shows only relevant trades) 🚨
+        display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
+        display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
 
         st.markdown("<div class='section-title'>⏳ ACTIVE TRADES (RUNNING AUTO-TRACKER)</div>", unsafe_allow_html=True)
-        if len(st.session_state.active_trades) > 0:
-            df_active = pd.DataFrame(st.session_state.active_trades)
+        if len(display_active) > 0:
+            df_active = pd.DataFrame(display_active)
             st.dataframe(df_active, use_container_width=True)
         else:
-            st.info("No trades are currently active. Waiting for LTP to cross Signal Entry...")
+            st.info("No trades are currently active for this market.")
 
         st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY (CLOSED TRADES)</div>", unsafe_allow_html=True)
-        if len(st.session_state.trade_history) > 0:
-            df_history = pd.DataFrame(st.session_state.trade_history)
+        if len(display_history) > 0:
+            df_history = pd.DataFrame(display_history)
             df_display = df_history.copy()
             df_display['Entry'] = df_display['Entry'].apply(lambda x: fmt_price(float(x)))
             df_display['Exit'] = df_display['Exit'].apply(lambda x: fmt_price(float(x)))
             df_display['P&L %'] = df_display['P&L %'].apply(lambda x: f"+{x}%" if float(x) >= 0 else f"{x}%")
             st.dataframe(df_display, use_container_width=True)
         else:
-            st.info("No closed trades yet. Once an Active Trade hits SL or Target, it will permanently save here.")
+            st.info("No closed trades yet for this market.")
 
     with col3:
         st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS (Selected List)</div>", unsafe_allow_html=True)
@@ -749,7 +762,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Clean Yahoo Finance Crypto Engine is Active \n\n ✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Web-Socket Timeout Fix is Active \n\n ✅ Focused Market Scanner is Active")
+    st.success("✅ Clean Yahoo Finance Engine is Active \n\n ✅ Fast iframe Chart Embed is Active \n\n ✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Focused Market Scanner is Active")
 
 if auto_refresh:
     time.sleep(refresh_time * 60)
