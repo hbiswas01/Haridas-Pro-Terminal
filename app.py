@@ -192,7 +192,7 @@ def get_oi_simulation(item_list):
         except: pass
     return setups
 
-# 🚨 UPDATED SIGNAL ENGINES (NOW RESPECTS MARKET SENTIMENT) 🚨
+# 🚨 SIGNAL ENGINES (RESPECTS MARKET SENTIMENT) 🚨
 @st.cache_data(ttl=60)
 def nse_ha_bb_strategy_5m(stock_list, sentiment="BOTH"):
     signals = []
@@ -223,7 +223,6 @@ def nse_ha_bb_strategy_5m(stock_list, sentiment="BOTH"):
             elif (prev_candle['HA_Low'] <= prev_candle['Lower_BB']) and (alert_candle['HA_Close'] > alert_candle['HA_Open']) and (alert_candle['HA_Low'] > alert_candle['Lower_BB']):
                 signal, entry, sl, target_bb = "BUY", alert_candle['High'] + 0.10, alert_candle['Low'] - 0.10, alert_candle['Upper_BB']
                 
-            # SENTIMENT FILTER LOGIC
             if sentiment == "BULLISH" and signal == "SHORT": continue
             if sentiment == "BEARISH" and signal == "BUY": continue
 
@@ -270,7 +269,6 @@ def crypto_ha_bb_strategy(crypto_list, sentiment="BOTH"):
             elif (prev_candle['HA_Low'] <= prev_candle['Lower_BB']) and (alert_candle['HA_Low'] > alert_candle['Lower_BB']):
                 signal, entry, sl, target_bb = "BUY", alert_candle['High'] + buffer, alert_candle['Low'] - buffer, alert_candle['Upper_BB']
                 
-            # SENTIMENT FILTER LOGIC
             if sentiment == "BULLISH" and signal == "SHORT": return None
             if sentiment == "BEARISH" and signal == "BUY": return None
 
@@ -339,7 +337,6 @@ def process_auto_trades(live_signals):
         save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
         save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
 
-# 🚨 FIXED PRE-MARKET VS OPENING MOVERS LOGIC 🚨
 @st.cache_data(ttl=60)
 def get_pre_market_gap(stock_list):
     movers = []
@@ -351,7 +348,7 @@ def get_pre_market_gap(stock_list):
                 prev_close = float(df['Close'].iloc[-2])
                 today_open = float(df['Open'].iloc[-1])
                 gap_pct = ((today_open - prev_close) / prev_close) * 100
-                if abs(gap_pct) >= 1.0: # At least 1% gap
+                if abs(gap_pct) >= 1.0: 
                     movers.append({"Stock": ticker, "Gap %": gap_pct, "Open": today_open})
         except: pass
     return sorted(movers, key=lambda x: abs(x['Gap %']), reverse=True)
@@ -367,7 +364,7 @@ def get_opening_movers(stock_list):
                 today_open = float(df['Open'].iloc[0])
                 ltp = float(df['Close'].iloc[-1])
                 move_pct = ((ltp - today_open) / today_open) * 100
-                if abs(move_pct) >= 1.5: # At least 1.5% intraday move
+                if abs(move_pct) >= 1.5: 
                     movers.append({"Stock": ticker, "Move %": move_pct, "LTP": ltp})
         except: pass
     return sorted(movers, key=lambda x: abs(x['Move %']), reverse=True)
@@ -448,22 +445,27 @@ with st.sidebar:
     
     is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
     
-    # 🚨 NEW: INSTANT REFRESH BUTTON 🚨
+    # 🚨 FIX: MISSING VARIABLES RESTORED 🚨
+    if not is_crypto_mode:
+        menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
+        sector_dict = FNO_SECTORS
+        all_assets = ALL_STOCKS
+    else:
+        menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE (CoinDCX)", "🧮 Futures Risk Calculator", "📊 Backtest Engine", "⚙️ Scanner Settings"]
+        sector_dict = CRYPTO_SECTORS
+        all_assets = ALL_CRYPTO
+    
+    # 🚨 INSTANT REFRESH BUTTON 🚨
     if st.button("🔄 REFRESH ALL DATA NOW", type="primary", use_container_width=True):
-        st.cache_data.clear() # Clears cache to force fresh data fetch
+        st.cache_data.clear() 
         st.rerun()
     st.divider()
 
     st.markdown("### 🎛️ HARIDAS DASHBOARD")
-    if not is_crypto_mode:
-        menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
-    else:
-        menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE (CoinDCX)", "🧮 Futures Risk Calculator", "📊 Backtest Engine", "⚙️ Scanner Settings"]
-    
     page_selection = st.radio("Select Menu:", menu_options)
     st.divider()
     
-    # 🚨 NEW: CUSTOM WATCHLIST MANAGER 🚨
+    # 🚨 CUSTOM WATCHLIST MANAGER 🚨
     st.markdown("### 📋 CUSTOM WATCHLIST")
     new_asset = st.text_input("Add Stock/Coin (e.g. ITC.NS / PEPE-USD):").upper().strip()
     if st.button("➕ Add Asset") and new_asset:
@@ -476,7 +478,7 @@ with st.sidebar:
         st.rerun()
 
     # Dynamic Sector Dict mapping
-    working_sectors = dict(FNO_SECTORS) if not is_crypto_mode else dict(CRYPTO_SECTORS)
+    working_sectors = dict(sector_dict)
     custom_list = st.session_state.custom_watch_in if not is_crypto_mode else st.session_state.custom_watch_cr
     if custom_list:
         working_sectors["⭐ MY WATCHLIST"] = custom_list
@@ -546,8 +548,7 @@ if page_selection == "📈 MAIN TERMINAL":
     process_auto_trades(live_signals)
 
     with st.spinner("Fetching Market Movers & Trends for Entire Market..."):
-        all_market_list = ALL_STOCKS if not is_crypto_mode else ALL_CRYPTO
-        gainers, losers, trends = get_dynamic_market_data(all_market_list)
+        gainers, losers, trends = get_dynamic_market_data(all_assets)
 
     important_assets = list(set([s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers] + current_watchlist))
     filtered_trends = [t for t in trends if t['Stock'] in important_assets]
@@ -633,7 +634,7 @@ if page_selection == "📈 MAIN TERMINAL":
         st.markdown(indices_html, unsafe_allow_html=True)
 
         with st.spinner("Calculating Breadth..."):
-            adv, dec = get_adv_dec(all_market_list)
+            adv, dec = get_adv_dec(all_assets)
         total_adv_dec = adv + dec
         adv_pct = (adv / total_adv_dec) * 100 if total_adv_dec > 0 else 50
         adv_title = "ADVANCE/ DECLINE (NSE)" if not is_crypto_mode else "ADVANCE/ DECLINE (CRYPTO)"
@@ -769,23 +770,23 @@ if page_selection == "📈 MAIN TERMINAL":
             st.markdown(l_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
 
-# ==================== PRE-MARKET & OPENING MOVERS (FIXED LOGIC) ====================
+# ==================== INDIAN MARKET MENUS ====================
 elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers"]:
     st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
-    with st.spinner("Scanning ALL Assets..."):
+    with st.spinner("Scanning Entire Market..."):
         if page_selection == "🌅 9:10 AM: Pre-Market Gap":
             movers = get_pre_market_gap(all_assets)
-            col_name = "Gap % (vs Yesterday Close)"
+            col_name = "Gap % (from Yesterday Close)"
         else:
             movers = get_opening_movers(all_assets)
-            col_name = "Move % (vs Today Open)"
+            col_name = "Move % (from Today Open)"
             
     if movers:
         m_html = f"<div class='table-container'><table class='v38-table'><tr><th>Stock 🔗</th><th>Data Point</th><th>{col_name}</th></tr>"
         for m in movers: 
             pct = m.get('Gap %', m.get('Move %', 0))
-            val = m.get('Open', m.get('LTP', 0))
             c = "green" if pct > 0 else "red"
+            val = m.get('Open', m.get('LTP', 0))
             link = get_tv_link(m['Stock'], market_mode)
             m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {m['Stock']}</a></td><td>{fmt_price(val, is_crypto_mode)}</td><td style='color:{c}; font-weight:bold;'>{pct:.2f}%</td></tr>"
         m_html += "</table></div>"
@@ -805,15 +806,14 @@ elif page_selection == "🔥 9:20 AM: OI Setup":
         st.markdown(oi_html, unsafe_allow_html=True)
     else: st.info("No significant real volume/OI spikes detected.")
 
-# ==================== NEW: 200+ COINDCX FUTURES EXECUTION ====================
+# ==================== CRYPTO MENUS ====================
 elif page_selection == "⚡ REAL TRADE (CoinDCX)":
-    st.markdown("<div class='section-title'>⚡ 200+ COINDCX FUTURES MARKETS (LIVE DATA)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>⚡ 200+ COINDCX FUTURES MARKETS (LIVE)</div>", unsafe_allow_html=True)
     
     with st.spinner("Fetching 200+ Live Futures from Binance Liquidity..."):
         df_f = get_all_crypto_futures()
         
     if not df_f.empty:
-        # Sortable interactive dataframe
         st.dataframe(df_f, use_container_width=True, height=400)
         
         st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
@@ -920,7 +920,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ REAL 200+ CoinDCX Futures Engine Added \n\n ✅ Custom Watchlist & Market Sentiment Active \n\n ✅ Full UI and CSS Restored \n\n ✅ Instant Master Refresh Active")
+    st.success("✅ Deep History Sync Engine Active (100% Angel One Match) \n\n ✅ Full UI Restored \n\n ✅ Background Stable Auto-Refresh Active")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
