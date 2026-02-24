@@ -56,12 +56,25 @@ FNO_SECTORS = {
     "NIFTY PSU BANK": ["SBIN.NS", "PNB.NS", "BOB.NS", "CANBK.NS"]
 }
 NIFTY_50 = ["ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", "BPCL.NS", "BHARTIARTL.NS", "BRITANNIA.NS", "CIPLA.NS", "COALINDIA.NS", "DIVISLAB.NS", "DRREDDY.NS", "EICHERMOT.NS", "GRASIM.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ITC.NS", "INDUSINDBK.NS", "INFY.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", "LTIM.NS", "M&M.NS", "MARUTI.NS", "NTPC.NS", "NESTLEIND.NS", "ONGC.NS", "POWERGRID.NS", "RELIANCE.NS", "SBILIFE.NS", "SBIN.NS", "SUNPHARMA.NS", "TCS.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATASTEEL.NS", "TECHM.NS", "TITAN.NS", "ULTRACEMCO.NS", "UPL.NS", "WIPRO.NS"]
-ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50 + st.session_state.custom_watch_in))
-
 CRYPTO_SECTORS = {
     "COINDCX WATCHLIST": ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD", "DOGE-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD", "TRX-USD", "MATIC-USD", "ESP-USD", "SENT-USD", "PIPPIN-USD", "HMSTR-USD"]
 }
+
+# 🚨 FIX 1: GLOBAL SCOPE VARIABLES (Prevents NameError) 🚨
+ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50 + st.session_state.custom_watch_in))
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist] + st.session_state.custom_watch_cr))
+
+market_mode = st.sidebar.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
+is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
+
+if not is_crypto_mode:
+    menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
+    sector_dict = FNO_SECTORS
+    all_assets = ALL_STOCKS
+else:
+    menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE (CoinDCX)", "🧮 Futures Risk Calculator", "📊 Backtest Engine", "⚙️ Scanner Settings"]
+    sector_dict = CRYPTO_SECTORS
+    all_assets = ALL_CRYPTO
 
 def fmt_price(val, is_crypto=False):
     try:
@@ -75,14 +88,23 @@ def fmt_price(val, is_crypto=False):
             return f"{val:,.2f}" 
     except: return "0.00"
 
+# 🚨 FIX 3: TRADINGVIEW ALIEN COW ERROR FIXED FOR INDICES 🚨
 def get_tv_link(ticker, market_mode):
     if market_mode == "🇮🇳 Indian Market (NSE)":
-        sym = "BSE:" + ticker.replace(".NS", "")
+        if ticker == "^BSESN": return "https://in.tradingview.com/chart/?symbol=BSE:SENSEX"
+        elif ticker == "^NSEI": return "https://in.tradingview.com/chart/?symbol=NSE:NIFTY"
+        elif ticker == "^NSEBANK": return "https://in.tradingview.com/chart/?symbol=NSE:BANKNIFTY"
+        elif ticker == "NIFTY_FIN_SERVICE.NS" or ticker == "FINNIFTY": return "https://in.tradingview.com/chart/?symbol=NSE:CNXFIN"
+        elif ticker == "^CNXIT": return "https://in.tradingview.com/chart/?symbol=NSE:CNXIT"
+        elif ticker == "INR=X": return "https://in.tradingview.com/chart/?symbol=FX_IDC:USDINR"
+        else:
+            sym = "BSE:" + ticker.replace(".NS", "")
+            return f"https://in.tradingview.com/chart/?symbol={sym}"
     else:
         sym = "BINANCE:" + ticker.replace("-USD", "USDT")
-    return f"https://in.tradingview.com/chart/?symbol={sym}"
+        return f"https://in.tradingview.com/chart/?symbol={sym}"
 
-# 🚨 THE NEW DIRECT COINDCX API ENGINE (NEVER BLOCKED) 🚨
+# --- 3. HELPER FUNCTIONS ---
 @st.cache_data(ttl=15)
 def get_coindcx_data():
     try:
@@ -97,27 +119,24 @@ def get_coindcx_data():
                     "change_pct": float(item.get('change_24_hour', 0))
                 }
         return ticker_dict
-    except:
-        return {}
+    except: return {}
 
-# 🚨 FIXED GET_LIVE_DATA (100% CRASH PROOF) 🚨
+# 🚨 FIX 2: BULLETPROOF LIVE DATA (Prevents TypeError: NoneType) 🚨
 @st.cache_data(ttl=15)
 def get_live_data(ticker_symbol, is_crypto=False):
     if is_crypto:
         dcx_data = get_coindcx_data()
         if ticker_symbol in dcx_data:
-            return dcx_data[ticker_symbol]['last_price'], 0.0, dcx_data[ticker_symbol]['change_pct']
+            return float(dcx_data[ticker_symbol]['last_price']), 0.0, float(dcx_data[ticker_symbol]['change_pct'])
         else:
-            # Fallback to YF but MUST ALWAYS RETURN TUPLE to prevent TypeError
             try:
                 df = yf.Ticker(ticker_symbol).history(period="5d")
                 if len(df) >= 2:
                     prev = float(df['Close'].iloc[-2])
                     ltp = float(df['Close'].iloc[-1])
-                    if prev > 0:
-                        return ltp, ltp-prev, ((ltp-prev)/prev)*100
+                    if prev > 0: return float(ltp), float(ltp-prev), float(((ltp-prev)/prev)*100)
             except: pass
-            return 0.0, 0.0, 0.0 # <--- This prevents the TypeError!
+            return 0.0, 0.0, 0.0 # Guaranteed Tuple Return
     else:
         try:
             stock = yf.Ticker(ticker_symbol)
@@ -132,7 +151,7 @@ def get_live_data(ticker_symbol, is_crypto=False):
                 if prev_close > 0 and ltp > 0:
                     change = ltp - prev_close
                     pct_change = (change / prev_close) * 100
-                    return ltp, change, pct_change
+                    return float(ltp), float(change), float(pct_change)
             return 0.0, 0.0, 0.0
         except: return 0.0, 0.0, 0.0
 
@@ -144,27 +163,31 @@ def get_real_sector_performance(sector_dict, ignore_keys=[], is_crypto=False):
         total_pct, valid = 0, 0
         stock_details = []
         for ticker in items:
-            ltp, _, pct = get_live_data(ticker, is_crypto)
-            if ltp > 0: 
-                total_pct += pct
-                valid += 1
-                stock_details.append({"Stock": ticker, "Pct": pct})
+            try:
+                res = get_live_data(ticker, is_crypto)
+                if res and len(res) == 3:
+                    ltp, _, pct = res
+                    if ltp > 0: 
+                        total_pct += pct
+                        valid += 1
+                        stock_details.append({"Stock": ticker, "Pct": pct})
+            except: continue
         if valid > 0:
             avg_pct = round(total_pct / valid, 2)
             stock_details = sorted(stock_details, key=lambda x: x['Pct'], reverse=True)
             results.append({"Sector": sector, "Pct": avg_pct, "Width": max(min(abs(avg_pct) * 20, 100), 5), "Stocks": stock_details})
     return sorted(results, key=lambda x: x['Pct'], reverse=True)
 
-# 🚨 ADDED EXTRA SAFETY NET HERE 🚨
 @st.cache_data(ttl=60)
 def get_adv_dec(item_list, is_crypto=False):
     adv, dec = 0, 0
     def fetch_chg(ticker): 
         try:
-            return get_live_data(ticker, is_crypto)[2]
-        except:
+            res = get_live_data(ticker, is_crypto)
+            if res and len(res) == 3: return res[2]
             return 0.0
-            
+        except: return 0.0
+        
     with ThreadPoolExecutor(max_workers=30) as executor:
         results = list(executor.map(fetch_chg, item_list))
     for pct in results:
@@ -177,15 +200,14 @@ def get_dynamic_market_data(item_list, is_crypto=False):
     gainers, losers, trends = [], [], []
     def fetch_data(ticker):
         try:
-            data = get_live_data(ticker, is_crypto)
-            if not data: return None
-            ltp, chg, pct_chg = data
+            res = get_live_data(ticker, is_crypto)
+            if not res or len(res) != 3: return None
+            ltp, chg, pct_chg = res
             if ltp == 0.0: return None
             
             status, color = None, None
             if not is_crypto:
-                stock = yf.Ticker(ticker)
-                df = stock.history(period="10d", interval="1d")
+                df = yf.Ticker(ticker).history(period="10d", interval="1d")
                 if len(df) >= 3:
                     c1 = ltp 
                     c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
@@ -326,7 +348,9 @@ def process_auto_trades(live_signals, is_crypto_mode):
 
     trades_to_remove = []
     for trade in st.session_state.active_trades:
-        ltp, _, _ = get_live_data(trade['Stock'], is_crypto_mode)
+        res = get_live_data(trade['Stock'], is_crypto_mode)
+        if not res or len(res) != 3: continue
+        ltp = res[0]
         if ltp == 0.0: continue
 
         close_reason = None
@@ -353,42 +377,50 @@ def process_auto_trades(live_signals, is_crypto_mode):
         save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
         save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
 
+# 🚨 FIX 4: PERFECT PRE-MARKET & OPENING MOVERS MATH 🚨
 @st.cache_data(ttl=60)
 def get_pre_market_gap(stock_list):
-    movers = []
-    for ticker in stock_list:
+    def fetch_gap(ticker):
         try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period="2d")
+            df = yf.Ticker(ticker).history(period="5d", interval="1d")
             if len(df) >= 2:
                 prev_close = float(df['Close'].iloc[-2])
                 today_open = float(df['Open'].iloc[-1])
-                gap_pct = ((today_open - prev_close) / prev_close) * 100
-                if abs(gap_pct) >= 1.0: 
-                    movers.append({"Stock": ticker, "Gap %": gap_pct, "Open": today_open})
-        except: pass
-    return sorted(movers, key=lambda x: abs(x['Gap %']), reverse=True)
+                if prev_close > 0 and today_open > 0:
+                    gap_pct = ((today_open - prev_close) / prev_close) * 100
+                    if abs(gap_pct) >= 1.0: 
+                        return {"Stock": ticker, "Gap %": gap_pct, "Open": today_open}
+        except: return None
+        return None
+        
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        results = list(executor.map(fetch_gap, stock_list))
+    return sorted([r for r in results if r], key=lambda x: abs(x['Gap %']), reverse=True)
 
 @st.cache_data(ttl=60)
 def get_opening_movers(stock_list):
-    movers = []
-    for ticker in stock_list:
+    def fetch_move(ticker):
         try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period="1d", interval="5m")
-            if not df.empty:
-                today_open = float(df['Open'].iloc[0])
-                ltp = float(df['Close'].iloc[-1])
-                move_pct = ((ltp - today_open) / today_open) * 100
-                if abs(move_pct) >= 1.5: 
-                    movers.append({"Stock": ticker, "Move %": move_pct, "LTP": ltp})
-        except: pass
-    return sorted(movers, key=lambda x: abs(x['Move %']), reverse=True)
+            df_day = yf.Ticker(ticker).history(period="1d", interval="1d")
+            if not df_day.empty:
+                today_open = float(df_day['Open'].iloc[-1])
+                try: ltp = float(yf.Ticker(ticker).fast_info.last_price)
+                except: ltp = float(df_day['Close'].iloc[-1])
+                if today_open > 0 and ltp > 0:
+                    move_pct = ((ltp - today_open) / today_open) * 100
+                    if abs(move_pct) >= 1.5: 
+                        return {"Stock": ticker, "Move %": move_pct, "LTP": ltp}
+        except: return None
+        return None
+        
+    with ThreadPoolExecutor(max_workers=50) as executor:
+        results = list(executor.map(fetch_move, stock_list))
+    return sorted([r for r in results if r], key=lambda x: abs(x['Move %']), reverse=True)
 
 @st.cache_data(ttl=60)
 def get_oi_simulation(item_list):
     setups = []
-    for ticker in item_list:
+    def fetch_oi(ticker):
         try:
             df = yf.Ticker(ticker).history(period="2d", interval="15m")
             if len(df) >= 3:
@@ -397,11 +429,14 @@ def get_oi_simulation(item_list):
                 c3 = df['Close'].iloc[-3]
                 if v1 > (v2 * 1.5):
                     oi_status = "🔥 High (Spike)"
-                    if c1 > c2: signal, color = "Short Covering 🚀", "green"
-                    else: signal, color = "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉", "red"
-                    setups.append({"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color})
-        except: pass
-    return setups
+                    if c1 > c2: return {"Stock": ticker, "Signal": "Short Covering 🚀", "OI": oi_status, "Color": "green"}
+                    else: return {"Stock": ticker, "Signal": "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉", "OI": oi_status, "Color": "red"}
+        except: return None
+        return None
+        
+    with ThreadPoolExecutor(max_workers=40) as executor:
+        results = list(executor.map(fetch_oi, item_list))
+    return [r for r in results if r]
 
 @st.cache_data(ttl=15)
 def get_all_crypto_futures():
@@ -416,6 +451,20 @@ def get_all_crypto_futures():
                     "Asset": f"{base}-USD",
                     "LTP": float(item.get('last_price', 0)),
                     "Change %": float(item.get('change_24_hour', 0))
+                })
+        if data: return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
+    except: pass
+    
+    try:
+        url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
+        res = requests.get(url, timeout=5).json()
+        data = []
+        for item in res:
+            if item['symbol'].endswith('USDT'):
+                data.append({
+                    "Asset": item['symbol'].replace('USDT', '-USD'),
+                    "LTP": float(item['lastPrice']),
+                    "Change %": float(item['priceChangePercent'])
                 })
         return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
     except: return pd.DataFrame()
@@ -470,23 +519,8 @@ css_string = (
 )
 st.markdown(css_string, unsafe_allow_html=True)
 
-# --- 5. Sidebar & Market Toggle ---
+# --- 5. Sidebar ---
 with st.sidebar:
-    st.markdown("### 🌍 SELECT MARKET")
-    market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
-    st.divider()
-    
-    is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
-    
-    if not is_crypto_mode:
-        menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
-        sector_dict = FNO_SECTORS
-        all_assets = ALL_STOCKS
-    else:
-        menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE (CoinDCX)", "🧮 Futures Risk Calculator", "📊 Backtest Engine", "⚙️ Scanner Settings"]
-        sector_dict = CRYPTO_SECTORS
-        all_assets = ALL_CRYPTO
-    
     st.markdown("### 🎛️ HARIDAS DASHBOARD")
     page_selection = st.radio("Select Menu:", menu_options)
     st.divider()
@@ -731,7 +765,8 @@ if page_selection == "📈 MAIN TERMINAL":
                 link = get_tv_link(t['Stock'], market_mode)
                 prefix = "₹" if not is_crypto_mode else "$"
                 
-                ltp, _, _ = get_live_data(t['Stock'], is_crypto_mode)
+                res = get_live_data(t['Stock'], is_crypto_mode)
+                ltp = res[0] if res and len(res) == 3 else t['Entry']
                 if ltp == 0: ltp = t['Entry'] 
                 
                 if t['Signal'] == 'BUY':
@@ -804,7 +839,7 @@ if page_selection == "📈 MAIN TERMINAL":
 # ==================== PRE-MARKET & OPENING MOVERS ====================
 elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers"]:
     st.markdown(f"<div class='section-title'>{page_selection}</div>", unsafe_allow_html=True)
-    with st.spinner("Scanning Entire Market..."):
+    with st.spinner("Scanning Entire Market (Superfast)..."):
         if page_selection == "🌅 9:10 AM: Pre-Market Gap":
             movers = get_pre_market_gap(all_assets)
             col_name = "Gap % (vs Yesterday Close)"
@@ -951,7 +986,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ REAL CoinDCX Data Sync Active (100% Unblockable) \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
+    st.success("✅ REAL CoinDCX Data Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
