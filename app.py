@@ -69,7 +69,6 @@ CRYPTO_SECTORS = {
 }
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist]))
 
-# 🚨 SMART DECIMAL FIX FOR INR & CRYPTO 🚨
 def fmt_price(val, is_crypto=False):
     try:
         val = float(val)
@@ -89,7 +88,7 @@ def get_tv_link(ticker, market_mode):
         sym = "BINANCE:" + ticker.replace("-USD", "USDT")
     return f"https://in.tradingview.com/chart/?symbol={sym}"
 
-# --- 3. HELPER FUNCTIONS ---
+# 🚨 THE ULTIMATE UNIFIED DATA ENGINE (FIXES THE CALCULATION BUG) 🚨
 @st.cache_data(ttl=15)
 def get_live_data(ticker_symbol):
     if "-USD" in ticker_symbol:
@@ -98,21 +97,34 @@ def get_live_data(ticker_symbol):
             url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
             res = requests.get(url, timeout=2).json()
             return float(res['lastPrice']), float(res['priceChange']), float(res['priceChangePercent'])
-        except: pass
-        
-    try:
-        stock = yf.Ticker(ticker_symbol)
-        df = stock.history(period='2d', interval='1m')
-        if not df.empty:
-            ltp = float(df['Close'].iloc[-1])
-            try: prev_close = float(stock.fast_info.previous_close)
-            except: prev_close = float(df['Close'].iloc[-2]) if len(df) > 1 else ltp
-            if pd.isna(ltp) or pd.isna(prev_close) or prev_close == 0: return 0.0, 0.0, 0.0
+        except: return 0.0, 0.0, 0.0
+    else:
+        try:
+            stock = yf.Ticker(ticker_symbol)
+            fast = stock.fast_info
+            
+            ltp = float(fast.last_price)
+            prev_close = float(fast.previous_close)
+            
+            if ltp == 0 or prev_close == 0 or pd.isna(ltp) or pd.isna(prev_close):
+                raise Exception("Fallback")
+                
             change = ltp - prev_close
             pct_change = (change / prev_close) * 100
             return ltp, change, pct_change
+        except:
+            # Absolute foolproof fallback to daily candles (not 1m candles!)
+            try:
+                df = stock.history(period='5d', interval='1d')
+                if len(df) >= 2:
+                    prev_close = float(df['Close'].iloc[-2])
+                    ltp = float(df['Close'].iloc[-1])
+                    if prev_close > 0:
+                        change = ltp - prev_close
+                        pct_change = (change / prev_close) * 100
+                        return ltp, change, pct_change
+            except: pass
         return 0.0, 0.0, 0.0
-    except: return 0.0, 0.0, 0.0
 
 @st.cache_data(ttl=60)
 def get_real_sector_performance(sector_dict, ignore_keys=["MIXED WATCHLIST", "ALL COINDCX FUTURES"]):
@@ -122,7 +134,7 @@ def get_real_sector_performance(sector_dict, ignore_keys=["MIXED WATCHLIST", "AL
         total_pct, valid = 0, 0
         stock_details = []
         for ticker in items:
-            _, _, pct = get_live_data(ticker)
+            _, _, pct = get_live_data(ticker) # Now uses the perfectly synced formula
             if pct != 0.0: 
                 total_pct += pct
                 valid += 1
@@ -149,20 +161,24 @@ def get_dynamic_market_data(item_list):
     gainers, losers, trends = [], [], []
     def fetch_data(ticker):
         try:
-            stock = yf.Ticker(ticker)
-            df = stock.history(period="10d")
-            if len(df) < 3: return None
-            try: c1 = float(stock.fast_info.last_price)
-            except: c1 = float(df['Close'].iloc[-1])
-            c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
-            o1, o2, o3 = float(df['Open'].iloc[-1]), float(df['Open'].iloc[-2]), float(df['Open'].iloc[-3])
+            # 🚨 Now synchronized with the exact same data as Sectors 🚨
+            ltp, chg, pct_chg = get_live_data(ticker)
+            if ltp == 0.0: return None
             
-            if c2 == 0 or pd.isna(c1): return None
-            pct_chg = ((c1 - c2) / c2) * 100
-            obj = {"Stock": ticker, "LTP": c1, "Pct": round(pct_chg, 2)}
+            # Use daily data only for the 3-day trend logic
+            stock = yf.Ticker(ticker)
+            df = stock.history(period="10d", interval="1d")
             status, color = None, None
-            if c1 > o1 and c2 > o2 and c3 > o3: status, color = "৩ দিন উত্থান", "green"
-            elif c1 < o1 and c2 < o2 and c3 < o3: status, color = "৩ দিন পতন", "red"
+            
+            if len(df) >= 3:
+                # We use real ltp for today's current close to be hyper-accurate
+                c1 = ltp
+                c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
+                o1, o2, o3 = float(df['Open'].iloc[-1]), float(df['Open'].iloc[-2]), float(df['Open'].iloc[-3])
+                if c1 > o1 and c2 > o2 and c3 > o3: status, color = "৩ দিন উত্থান", "green"
+                elif c1 < o1 and c2 < o2 and c3 < o3: status, color = "৩ দিন পতন", "red"
+                
+            obj = {"Stock": ticker, "LTP": ltp, "Pct": round(pct_chg, 2)}
             return (obj, status, color)
         except: return None
 
@@ -472,15 +488,12 @@ if page_selection == "📈 MAIN TERMINAL":
 
     process_auto_trades(live_signals)
 
-    # 🚨 FIX 1: SCAN THE ENTIRE MARKET FOR REAL TOP GAINERS/LOSERS 🚨
     with st.spinner("Fetching Market Movers & Trends for Entire Market..."):
         gainers, losers, trends = get_dynamic_market_data(all_assets)
 
-    # Trend continuity applies to important assets from whole market + active watchlist
     important_assets = list(set([s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers] + current_watchlist))
     filtered_trends = [t for t in trends if t['Stock'] in important_assets]
 
-    # 🚨 FIX 2: WIDER COLUMNS TO PREVENT SQUEEZING TEXT 🚨
     col1, col2, col3 = st.columns([1.25, 2.5, 1.25])
 
     with col1:
@@ -493,7 +506,6 @@ if page_selection == "📈 MAIN TERMINAL":
                     c = "green" if s['Pct'] >= 0 else "red"
                     bc = "bar-fg-green" if s['Pct'] >= 0 else "bar-fg-red"
                     sign = "+" if s['Pct'] >= 0 else ""
-                    # 🚨 FIX: Wrap and Layout logic fixed so text doesn't break into new line 🚨
                     sec_html += f"""
                     <details class='sector-details'>
                         <summary class='sector-summary'>
@@ -643,7 +655,6 @@ if page_selection == "📈 MAIN TERMINAL":
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
                 
-                # Smart Decimal ensures 2 zeros for INR, 4+ for Crypto
                 formatted_points = fmt_price(abs(points), is_crypto_mode)
                 
                 act_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'], is_crypto_mode)}</td><td>{prefix}{fmt_price(ltp, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='color:#856404;'>{prefix}{fmt_price(t['Target'], is_crypto_mode)}</td><td style='color:#dc3545;'>{prefix}{fmt_price(t['SL'], is_crypto_mode)}</td><td>{t['Date']}</td></tr>"
@@ -832,7 +843,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Smart Decimal Formatting (INR/Crypto) \n\n ✅ Wide Balanced Layout \n\n ✅ Compact Table Headers \n\n ✅ Background Stable Auto-Refresh Active")
+    st.success("✅ Unified Accurate Data Engine Active \n\n ✅ Smart Decimal Formatting (INR/Crypto) \n\n ✅ CSS Wrapping Fixed")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
