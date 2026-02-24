@@ -532,10 +532,10 @@ css_string = (
 )
 st.markdown(css_string, unsafe_allow_html=True)
 
-# --- 5. Sidebar & UI Controls ---
+# --- 5. Sidebar & Market Toggle ---
 with st.sidebar:
     st.markdown("### 🌍 SELECT MARKET")
-    market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0, key="market_toggle_main")
+    market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
     st.divider()
     
     is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
@@ -550,11 +550,11 @@ with st.sidebar:
         all_assets = ALL_CRYPTO
     
     st.markdown("### 🎛️ HARIDAS DASHBOARD")
-    page_selection = st.radio("Select Menu:", menu_options, key="menu_selection_main")
+    page_selection = st.radio("Select Menu:", menu_options)
     st.divider()
     
     st.markdown("### 📋 CUSTOM WATCHLIST")
-    new_asset = st.text_input("Add Stock/Coin (e.g. ITC.NS / PEPE-USD):", key="new_asset_input").upper().strip()
+    new_asset = st.text_input("Add Stock/Coin (e.g. ITC.NS / PEPE-USD):").upper().strip()
     if st.button("➕ Add Asset") and new_asset:
         if not is_crypto_mode:
             if new_asset not in st.session_state.custom_watch_in: st.session_state.custom_watch_in.append(new_asset)
@@ -575,17 +575,17 @@ with st.sidebar:
 
     st.divider()
     st.markdown("### ⚙️ STRATEGY SETTINGS")
-    user_sentiment = st.radio("Market Sentiment:", ["BOTH", "BULLISH", "BEARISH"], key="sentiment_toggle")
-    selected_sector = st.selectbox("Select Watchlist to Scan:", list(working_sectors.keys()), index=0, key="watchlist_selector")
+    user_sentiment = st.radio("Market Sentiment:", ["BOTH", "BULLISH", "BEARISH"])
+    selected_sector = st.selectbox("Select Watchlist to Scan:", list(working_sectors.keys()), index=0)
     current_watchlist = working_sectors[selected_sector]
     
     st.divider()
     st.markdown("### ⏱️ AUTO REFRESH")
-    auto_refresh_toggle = st.checkbox("Enable Auto-Refresh", value=st.session_state.auto_ref, key="auto_ref_toggle")
+    auto_refresh_toggle = st.checkbox("Enable Auto-Refresh", value=st.session_state.auto_ref)
     if auto_refresh_toggle != st.session_state.auto_ref:
         st.session_state.auto_ref = auto_refresh_toggle
         st.rerun()
-    refresh_time = st.selectbox("Interval (Mins):", [1, 3, 5], index=0, key="refresh_interval") 
+    refresh_time = st.selectbox("Interval (Mins):", [1, 3, 5], index=0) 
     
     if st.button("🗑️ Clear All History Data"):
         st.session_state.active_trades = []
@@ -623,7 +623,7 @@ st.markdown(f"""
 
 col_ref1, col_ref2 = st.columns([8, 2])
 with col_ref2:
-    if st.button("🔄 REFRESH LIVE DATA", type="primary", use_container_width=True, key="top_refresh_btn"):
+    if st.button("🔄 REFRESH LIVE DATA", type="primary", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
 
@@ -632,10 +632,10 @@ if page_selection == "📈 MAIN TERMINAL":
     
     if not is_crypto_mode:
         with st.spinner(f"Scanning 5m HA Charts (Sentiment: {user_sentiment})..."): 
-            live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
+            live_signals = run_nse_strategy(current_watchlist, user_sentiment)
     else:
         with st.spinner(f"Scanning 1H HA Charts (Sentiment: {user_sentiment})..."): 
-            live_signals = crypto_ha_bb_strategy(current_watchlist, user_sentiment)
+            live_signals = run_crypto_strategy(current_watchlist, user_sentiment)
 
     process_auto_trades(live_signals, is_crypto_mode)
 
@@ -779,10 +779,10 @@ if page_selection == "📈 MAIN TERMINAL":
         with st.expander("➕ Add New Trade to Journal"):
             with st.form("journal_form"):
                 j_col1, j_col2, j_col3, j_col4 = st.columns(4)
-                with j_col1: j_asset = st.selectbox("Select Asset", sorted(all_assets), key="journal_asset")
-                with j_col2: j_signal = st.selectbox("Signal", ["BUY", "SHORT"], key="journal_signal")
-                with j_col3: j_entry = st.number_input("Entry Price", min_value=0.0, format="%.6f", key="journal_entry")
-                with j_col4: j_exit = st.number_input("Exit Price", min_value=0.0, format="%.6f", key="journal_exit")
+                with j_col1: j_asset = st.selectbox("Select Asset", sorted(all_assets))
+                with j_col2: j_signal = st.selectbox("Signal", ["BUY", "SHORT"])
+                with j_col3: j_entry = st.number_input("Entry Price", min_value=0.0, format="%.6f")
+                with j_col4: j_exit = st.number_input("Exit Price", min_value=0.0, format="%.6f")
                 submit_trade = st.form_submit_button("💾 Save Trade")
                 
                 if submit_trade and j_asset != "":
@@ -851,7 +851,7 @@ if page_selection == "📈 MAIN TERMINAL":
             
             df_history = pd.DataFrame(display_history)
             csv_journal = df_history.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Export Journal to Excel", data=csv_journal, file_name=f"Haridas_Journal_{datetime.date.today()}.csv", mime="text/csv", key="download_csv")
+            st.download_button("📥 Export Journal to Excel", data=csv_journal, file_name=f"Haridas_Journal_{datetime.date.today()}.csv", mime="text/csv")
         else:
             st.info("No closed trades yet for this market.")
 
@@ -918,7 +918,7 @@ elif page_selection == "🔥 9:20 AM: OI Setup":
 elif page_selection == "⚡ REAL TRADE (CoinDCX)":
     st.markdown("<div class='section-title'>⚡ 200+ COINDCX FUTURES MARKETS (LIVE DATA)</div>", unsafe_allow_html=True)
     
-    with st.spinner("Fetching 200+ Live Futures directly from API..."):
+    with st.spinner("Fetching 200+ Live Futures directly from CoinDCX..."):
         df_f = fetch_all_crypto()
         
     if not df_f.empty:
@@ -929,12 +929,12 @@ elif page_selection == "⚡ REAL TRADE (CoinDCX)":
         with st.form("coindcx_order_form"):
             col1, col2 = st.columns(2)
             with col1:
-                t_market = st.selectbox("Select Coin", df_f['Asset'].tolist(), key="trade_coin")
-                t_side = st.selectbox("Action", ["BUY", "SELL"], key="trade_action")
+                t_market = st.selectbox("Select Coin", df_f['Asset'].tolist())
+                t_side = st.selectbox("Action", ["BUY", "SELL"])
             with col2:
-                t_type = st.selectbox("Order Type", ["limit_order", "market_order"], key="trade_type")
-                t_price = st.number_input("Price (Required for Limit)", min_value=0.0, format="%.6f", key="trade_price")
-                t_qty = st.number_input("Quantity", min_value=0.0, format="%.6f", key="trade_qty")
+                t_type = st.selectbox("Order Type", ["limit_order", "market_order"])
+                t_price = st.number_input("Price (Required for Limit)", min_value=0.0, format="%.6f")
+                t_qty = st.number_input("Quantity", min_value=0.0, format="%.6f")
             
             submit_real_trade = st.form_submit_button("🚀 PLACE REAL ORDER", use_container_width=True)
             
@@ -955,18 +955,18 @@ elif page_selection == "🧮 Futures Risk Calculator":
     st.markdown("<div class='calc-box'>", unsafe_allow_html=True)
     calc_col1, calc_col2, calc_col3, calc_col4 = st.columns(4)
     with calc_col1:
-        trade_type = st.selectbox("Trade Direction", ["LONG (Buy)", "SHORT (Sell)"], key="calc_dir")
-        capital = st.number_input("Total Capital (USDT)", min_value=1.0, value=100.0, step=10.0, key="calc_cap")
+        trade_type = st.selectbox("Trade Direction", ["LONG (Buy)", "SHORT (Sell)"])
+        capital = st.number_input("Total Capital (USDT)", min_value=1.0, value=100.0, step=10.0)
     with calc_col2:
-        entry_price = st.number_input("Entry Price (USDT)", min_value=0.000001, value=65000.0, step=10.0, format="%.6f", key="calc_entry")
-        leverage = st.slider("Leverage (x)", min_value=1, max_value=100, value=10, key="calc_lev")
+        entry_price = st.number_input("Entry Price (USDT)", min_value=0.000001, value=65000.0, step=10.0, format="%.6f")
+        leverage = st.slider("Leverage (x)", min_value=1, max_value=100, value=10)
     with calc_col3:
-        stop_loss = st.number_input("Stop Loss (USDT)", min_value=0.000001, value=64000.0, step=10.0, format="%.6f", key="calc_sl")
-        risk_pct = st.number_input("Risk % per Trade", min_value=0.1, max_value=100.0, value=2.0, step=0.5, key="calc_risk")
+        stop_loss = st.number_input("Stop Loss (USDT)", min_value=0.000001, value=64000.0, step=10.0, format="%.6f")
+        risk_pct = st.number_input("Risk % per Trade", min_value=0.1, max_value=100.0, value=2.0, step=0.5)
     with calc_col4:
         st.write("")
         st.write("")
-        if st.button("🚀 Calculate Risk", use_container_width=True, key="calc_btn"):
+        if st.button("🚀 Calculate Risk", use_container_width=True):
             price_diff = abs(entry_price - stop_loss)
             if price_diff > 0:
                 risk_amt = capital * (risk_pct / 100)
@@ -985,11 +985,11 @@ elif page_selection == "📊 Backtest Engine":
     st.markdown("<div class='section-title'>📊 Backtest Engine (Strictly Segregated)</div>", unsafe_allow_html=True)
     bt_col1, bt_col2 = st.columns(2)
     with bt_col1:
-        bt_stock = st.selectbox("Select Asset to Backtest:", sorted(all_assets), index=0, key="bt_asset")
+        bt_stock = st.selectbox("Select Asset to Backtest:", sorted(all_assets), index=0)
     with bt_col2:
-        bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"], key="bt_period")
+        bt_period = st.selectbox("Select Time Period:", ["1mo", "3mo", "6mo", "1y", "2y"])
 
-    if st.button("🚀 Run Backtest", use_container_width=True, key="bt_run"):
+    if st.button("🚀 Run Backtest", use_container_width=True):
         with st.spinner(f"Fetching {bt_period} historical data for {bt_stock}..."):
             try:
                 bt_data = yf.Ticker(bt_stock).history(period=bt_period)
@@ -1028,7 +1028,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ REAL 200+ CoinDCX Data Sync Active \n\n ✅ Streamlit Duplicate Element Bug Fixed \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Binance Fast Kline API for Trends Enabled")
+    st.success("✅ REAL 200+ CoinDCX Data Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
