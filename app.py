@@ -63,6 +63,18 @@ CRYPTO_SECTORS = {
 ALL_STOCKS = list(set([stock for slist in FNO_SECTORS.values() for stock in slist] + NIFTY_50 + st.session_state.custom_watch_in))
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist] + st.session_state.custom_watch_cr))
 
+market_mode = st.sidebar.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
+is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
+
+if not is_crypto_mode:
+    menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
+    sector_dict = FNO_SECTORS
+    all_assets = ALL_STOCKS
+else:
+    menu_options = ["📈 MAIN TERMINAL", "⚡ REAL TRADE (CoinDCX)", "🧮 Futures Risk Calculator", "📊 Backtest Engine", "⚙️ Scanner Settings"]
+    sector_dict = CRYPTO_SECTORS
+    all_assets = ALL_CRYPTO
+
 def fmt_price(val, is_crypto=False):
     try:
         val = float(val)
@@ -173,6 +185,31 @@ def fetch_live_data(ticker_symbol, is_crypto=False):
                 return (0.0, 0.0, 0.0)
             except: return (0.0, 0.0, 0.0)
     except: return (0.0, 0.0, 0.0)
+
+# 🚨 NEW FAST CRYPTO TREND SCANNER (API BASED) 🚨
+@st.cache_data(ttl=120, show_spinner=False)
+def get_crypto_trends(item_list):
+    trends = []
+    def fetch_trend(ticker):
+        try:
+            symbol = ticker.replace('-USD', 'USDT')
+            url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval=1d&limit=3"
+            res = requests.get(url, timeout=3).json()
+            if len(res) >= 3:
+                o3, c3 = float(res[-3][1]), float(res[-3][4])
+                o2, c2 = float(res[-2][1]), float(res[-2][4])
+                o1, c1 = float(res[-1][1]), float(res[-1][4])
+
+                if c1 > o1 and c2 > o2 and c3 > o3:
+                    return {"Stock": ticker, "Status": "৩ দিন উত্থান", "Color": "green"}
+                elif c1 < o1 and c2 < o2 and c3 < o3:
+                    return {"Stock": ticker, "Status": "৩ দিন পতন", "Color": "red"}
+        except: pass
+        return None
+
+    with ThreadPoolExecutor(max_workers=30) as executor:
+        results = list(executor.map(fetch_trend, item_list))
+    return [r for r in results if r]
 
 @st.cache_data(ttl=60, show_spinner=False)
 def calc_sector_perf(sector_dict, ignore_keys=[], is_crypto=False):
@@ -290,7 +327,6 @@ def nse_ha_bb_strategy_5m(stock_list, sentiment="BOTH"):
         except: continue
     return signals
 
-# 🚨 THE MISSING CRYPTO STRATEGY FUNCTION HAS BEEN RESTORED HERE 🚨
 @st.cache_data(ttl=60, show_spinner=False)
 def crypto_ha_bb_strategy(crypto_list, sentiment="BOTH"):
     signals = []
@@ -509,7 +545,7 @@ css_string = (
 )
 st.markdown(css_string, unsafe_allow_html=True)
 
-# --- 5. Sidebar & Market Toggle ---
+# --- 5. Sidebar ---
 with st.sidebar:
     st.markdown("### 🌍 SELECT MARKET")
     market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
@@ -625,8 +661,10 @@ if page_selection == "📈 MAIN TERMINAL":
                 df_renamed = df_all_crypto.rename(columns={'Asset': 'Stock', 'Change %': 'Pct'})
                 gainers = df_renamed[df_renamed['Pct'] > 0].head(5).to_dict('records')
                 losers = df_renamed[df_renamed['Pct'] < 0].sort_values(by='Pct', ascending=True).head(5).to_dict('records')
-                trend_scan_list = list(set([s['Stock'] for s in live_signals] + current_watchlist))
-                _, _, trends = calc_dynamic_movers(trend_scan_list, True)
+                
+                # 🚨 FAST BINANCE KLINE API TREND SCANNER FOR CRYPTO 🚨
+                trend_scan_list = list(set([s['Stock'] for s in live_signals] + current_watchlist + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers]))
+                trends = get_crypto_trends(trend_scan_list)
             else:
                 adv, dec = 0, 0
                 gainers, losers, trends = [], [], []
@@ -1004,7 +1042,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ FULL 200+ CoinDCX Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
+    st.success("✅ REAL 200+ CoinDCX Data Sync Active \n\n ✅ Binance Fast Kline API for Trends Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
