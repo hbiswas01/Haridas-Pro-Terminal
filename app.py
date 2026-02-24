@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import datetime
 import pytz
 import yfinance as yf
@@ -33,6 +32,8 @@ if 'active_trades' not in st.session_state:
     st.session_state.active_trades = load_data(ACTIVE_TRADES_FILE)
 if 'trade_history' not in st.session_state:
     st.session_state.trade_history = load_data(HISTORY_TRADES_FILE)
+if 'auto_ref' not in st.session_state:
+    st.session_state.auto_ref = False
 
 # --- 2. Live Market Data Dictionary ---
 FNO_SECTORS = {
@@ -76,9 +77,25 @@ def fmt_price(val):
         else: return f"{val:,.2f}"
     except: return "0.00"
 
+# 🚨 DYNAMIC CHART LINK GENERATOR 🚨
+def get_tv_link(ticker, market_mode):
+    if market_mode == "🇮🇳 Indian Market (NSE)":
+        sym = "BSE:" + ticker.replace(".NS", "")
+    else:
+        sym = "BINANCE:" + ticker.replace("-USD", "USDT")
+    return f"https://in.tradingview.com/chart/?symbol={sym}"
+
 # --- 3. HELPER FUNCTIONS ---
 @st.cache_data(ttl=15)
 def get_live_data(ticker_symbol):
+    if "-USD" in ticker_symbol:
+        try:
+            symbol = ticker_symbol.replace("-USD", "USDT")
+            url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
+            res = requests.get(url, timeout=2).json()
+            return float(res['lastPrice']), float(res['priceChange']), float(res['priceChangePercent'])
+        except: pass
+        
     try:
         stock = yf.Ticker(ticker_symbol)
         df = stock.history(period='2d', interval='1m')
@@ -86,25 +103,12 @@ def get_live_data(ticker_symbol):
             ltp = float(df['Close'].iloc[-1])
             try: prev_close = float(stock.fast_info.previous_close)
             except: prev_close = float(df['Close'].iloc[-2]) if len(df) > 1 else ltp
-            
             if pd.isna(ltp) or pd.isna(prev_close) or prev_close == 0: return 0.0, 0.0, 0.0
             change = ltp - prev_close
             pct_change = (change / prev_close) * 100
             return ltp, change, pct_change
         return 0.0, 0.0, 0.0
     except: return 0.0, 0.0, 0.0
-
-@st.cache_data(ttl=300)
-def get_market_news():
-    try:
-        url = "https://economictimes.indiatimes.com/markets/rssfeeds/2146842.cms"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response: xml_data = response.read()
-        root = ET.fromstring(xml_data)
-        headlines = [item.find('title').text.strip() for item in root.findall('.//item')[:5] if item.find('title') is not None]
-        if headlines: return "📰 LIVE MARKET NEWS: " + " 🔹 ".join(headlines) + " 🔹"
-    except: pass
-    return "📰 LIVE MARKET NEWS: Fetching latest feeds... 🔹"
 
 @st.cache_data(ttl=60)
 def get_real_sector_performance(sector_dict, ignore_keys=["MIXED WATCHLIST", "ALL COINDCX FUTURES"]):
@@ -139,16 +143,13 @@ def get_dynamic_market_data(item_list):
             stock = yf.Ticker(ticker)
             df = stock.history(period="10d")
             if len(df) < 3: return None
-            
             try: c1 = float(stock.fast_info.last_price)
             except: c1 = float(df['Close'].iloc[-1])
-            
             c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
             o1, o2, o3 = float(df['Open'].iloc[-1]), float(df['Open'].iloc[-2]), float(df['Open'].iloc[-3])
             
             if c2 == 0 or pd.isna(c1): return None
             pct_chg = ((c1 - c2) / c2) * 100
-            
             obj = {"Stock": ticker, "LTP": c1, "Pct": round(pct_chg, 2)}
             status, color = None, None
             if c1 > o1 and c2 > o2 and c3 > o3: status, color = "৩ দিন উত্থান", "green"
@@ -193,12 +194,10 @@ def nse_ha_bb_strategy_5m(stock_list, market_sentiment="BULLISH"):
         try:
             df = yf.Ticker(stock_symbol).history(period="5d", interval="5m") 
             if df.empty or len(df) < 25: continue
-            
             df['SMA_20'] = df['Close'].rolling(window=20).mean()
             df['STD_20'] = df['Close'].rolling(window=20).std()
             df['Upper_BB'] = df['SMA_20'] + (2 * df['STD_20'])
             df['Lower_BB'] = df['SMA_20'] - (2 * df['STD_20'])
-            
             df['HA_Close'] = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
             ha_open = [df['Open'].iloc[0]]
             for i in range(1, len(df)): ha_open.append((ha_open[i-1] + df['HA_Close'].iloc[i-1]) / 2)
@@ -237,12 +236,10 @@ def crypto_ha_bb_strategy(crypto_list):
         try:
             df = yf.Ticker(coin).history(period="15d", interval="1h") 
             if df.empty or len(df) < 25: return None
-            
             df['SMA_20'] = df['Close'].rolling(window=20).mean()
             df['STD_20'] = df['Close'].rolling(window=20).std()
             df['Upper_BB'] = df['SMA_20'] + (2 * df['STD_20'])
             df['Lower_BB'] = df['SMA_20'] - (2 * df['STD_20'])
-            
             df['HA_Close'] = (df['Open'] + df['High'] + df['Low'] + df['Close']) / 4
             ha_open = [df['Open'].iloc[0]]
             for i in range(1, len(df)): ha_open.append((ha_open[i-1] + df['HA_Close'].iloc[i-1]) / 2)
@@ -337,6 +334,22 @@ def get_opening_movers(stock_list):
             movers.append({"Stock": ticker, "LTP": ltp, "Pct": pct})
     return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
 
+def place_coindcx_order(market, side, order_type, price, quantity):
+    try:
+        key = st.secrets["DCX_KEY"]
+        secret = st.secrets["DCX_SECRET"]
+    except: return {"error": "API Keys not found in Streamlit Secrets."}
+    secret_bytes = bytes(secret, 'utf-8')
+    timestamp = int(round(time.time() * 1000))
+    dcx_market = f"B-{market.replace('-USD', '_USDT')}"
+    body = {"side": side.lower(), "order_type": order_type, "market": dcx_market, "price_per_unit": price, "total_quantity": quantity, "timestamp": timestamp}
+    json_body = json.dumps(body, separators=(',', ':'))
+    signature = hmac.new(secret_bytes, json_body.encode(), hashlib.sha256).hexdigest()
+    url = "https://api.coindcx.com/exchange/v1/orders/create"
+    headers = {'X-AUTH-APIKEY': key, 'X-AUTH-SIGNATURE': signature, 'Content-Type': 'application/json'}
+    try: return requests.post(url, data=json_body, headers=headers).json()
+    except Exception as e: return {"error": str(e)}
+
 # --- 4. CSS ---
 css_string = (
     "<style>"
@@ -349,6 +362,8 @@ css_string = (
     ".v38-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 11px; color: black; background: white; border: 1px solid #b0c4de; margin-bottom: 10px; white-space: nowrap; } "
     ".v38-table th { background-color: #4f81bd; color: white; padding: 8px; border: 1px solid #b0c4de; font-weight: bold; } "
     ".v38-table td { padding: 8px; border: 1px solid #b0c4de; } "
+    ".v38-table a { text-decoration: none; cursor: pointer; } "
+    ".v38-table a:hover { text-decoration: underline; } "
     ".idx-container { display: flex; justify-content: space-between; background: white; border: 1px solid #b0c4de; padding: 5px; margin-bottom: 10px; flex-wrap: wrap; border-radius: 5px; } "
     ".idx-box { text-align: center; width: 31%; border-right: 1px solid #eee; padding: 5px; min-width: 100px; margin-bottom: 5px; } "
     ".idx-box:nth-child(3n) { border-right: none; } "
@@ -388,8 +403,13 @@ with st.sidebar:
     current_watchlist = sector_dict[selected_sector]
     st.divider()
     
+    # 🚨 FIX: Stable Auto-Refresh Toggle 🚨
     st.markdown("### ⏱️ AUTO REFRESH")
-    auto_refresh = st.checkbox("Enable Auto-Refresh", value=False)
+    auto_refresh_toggle = st.checkbox("Enable Auto-Refresh", value=st.session_state.auto_ref)
+    if auto_refresh_toggle != st.session_state.auto_ref:
+        st.session_state.auto_ref = auto_refresh_toggle
+        st.rerun()
+        
     refresh_time = st.selectbox("Interval (Mins):", [1, 3, 5], index=0) 
     
     if st.button("🗑️ Clear All History Data"):
@@ -400,10 +420,6 @@ with st.sidebar:
         st.success("History Cleared!")
         time.sleep(1)
         st.rerun()
-
-if auto_refresh:
-    refresh_sec = refresh_time * 60
-    st.markdown(f'<meta http-equiv="refresh" content="{refresh_sec}">', unsafe_allow_html=True)
 
 # --- 6. Top Navigation ---
 ist_timezone = pytz.timezone('Asia/Kolkata')
@@ -460,7 +476,6 @@ if page_selection == "📈 MAIN TERMINAL":
                 for s in real_sectors:
                     c = "green" if s['Pct'] >= 0 else "red"
                     bc = "bar-fg-green" if s['Pct'] >= 0 else "bar-fg-red"
-                    # 🚨 FIX: Visual Trend Bar is Back! 🚨
                     sec_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{s['Sector']}</td><td style='color:{c}; font-weight:bold;'>{s['Pct']}%</td><td style='padding:4px 8px;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></td></tr>"
                 sec_html += "</table></div>"
                 st.markdown(sec_html, unsafe_allow_html=True)
@@ -468,7 +483,9 @@ if page_selection == "📈 MAIN TERMINAL":
         st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (IMPORTANT LIST)</div>", unsafe_allow_html=True)
         if filtered_trends:
             t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
-            for t in filtered_trends: t_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{t['Stock']}</td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
+            for t in filtered_trends: 
+                link = get_tv_link(t['Stock'], market_mode)
+                t_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{t['Stock']}</a></td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
             t_html += "</table></div>"
             st.markdown(t_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found in active list.</p>", unsafe_allow_html=True)
@@ -530,54 +547,19 @@ if page_selection == "📈 MAIN TERMINAL":
             st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL COINDCX FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
 
         if len(live_signals) > 0:
-            sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
+            sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset (Click 4 Chart)</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
             for sig in live_signals:
                 sig_clr = "green" if sig['Signal'] == "BUY" else "red"
                 prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
-                sig_html += f"<tr><td style='color:{sig_clr}; font-weight:bold;'>{sig['Stock']}</td><td>{prefix}{fmt_price(sig['Entry'])}</td><td>{prefix}{fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{prefix}{fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#856404;'>{prefix}{fmt_price(sig['T2(1:3)'])}</td><td>{sig['Time']}</td></tr>"
+                link = get_tv_link(sig['Stock'], market_mode)
+                # 🚨 Clickable Ticker Name 🚨
+                sig_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank' style='color:{sig_clr};'>{sig['Stock']}</a></td><td>{prefix}{fmt_price(sig['Entry'])}</td><td>{prefix}{fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{prefix}{fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#856404;'>{prefix}{fmt_price(sig['T2(1:3)'])}</td><td>{sig['Time']}</td></tr>"
             sig_html += "</table></div>"
             st.markdown(sig_html, unsafe_allow_html=True)
         else:
             st.info("⏳ No fresh signals right now.")
 
-        # 🚨 FIX: REAL TRADINGVIEW WIDGET RESTORED (Works flawlessly with BSE prefix for India) 🚨
-        st.markdown("<div class='section-title'>📈 QUICK CHART VIEWER</div>", unsafe_allow_html=True)
-        tv_asset = st.selectbox("Select Asset to view live chart:", sorted(all_assets))
-        
-        # Super logic to fix the "Not Available" error
-        if market_mode == "🇮🇳 Indian Market (NSE)": 
-            tv_symbol = "BSE:" + tv_asset.replace(".NS", "")
-            tv_interval = "5"
-        else: 
-            tv_symbol = "BINANCE:" + tv_asset.replace("-USD", "USDT")
-            tv_interval = "60"
-            
-        widget_html = f"""
-        <div class="tradingview-widget-container">
-          <div id="tradingview_home_chart" style="height:450px;width:100%;"></div>
-          <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-          <script type="text/javascript">
-          new TradingView.widget(
-          {{
-          "autosize": true,
-          "symbol": "{tv_symbol}",
-          "interval": "{tv_interval}",
-          "timezone": "Asia/Kolkata",
-          "theme": "light",
-          "style": "1",
-          "locale": "en",
-          "enable_publishing": false,
-          "hide_side_toolbar": false,
-          "allow_symbol_change": true,
-          "container_id": "tradingview_home_chart"
-        }}
-          );
-          </script>
-        </div>
-        """
-        components.html(widget_html, height=450)
-
-        # 🚨 FIX: MANUAL TRADE LOG RESTORED! 🚨
+        # 🚨 Restored Manual Trade Form 🚨
         st.markdown("<div class='section-title'>📝 TRADE JOURNAL (MANUAL LOG)</div>", unsafe_allow_html=True)
         with st.expander("➕ Add New Trade to Journal"):
             with st.form("journal_form"):
@@ -621,22 +603,24 @@ if page_selection == "📈 MAIN TERMINAL":
             st.info("No closed trades yet for this market.")
 
     with col3:
-        st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS (Selected List)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS</div>", unsafe_allow_html=True)
         if gainers:
             g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
             for g in gainers: 
                 prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
-                g_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{g['Stock']}</td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
+                link = get_tv_link(g['Stock'], market_mode)
+                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
             g_html += "</table></div>"
             st.markdown(g_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
 
-        st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS (Selected List)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS</div>", unsafe_allow_html=True)
         if losers:
             l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
             for l in losers: 
                 prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
-                l_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{l['Stock']}</td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
+                link = get_tv_link(l['Stock'], market_mode)
+                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
             l_html += "</table></div>"
             st.markdown(l_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
@@ -650,7 +634,8 @@ elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening M
         m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock</th><th>LTP</th><th>Movement %</th></tr>"
         for m in movers: 
             c = "green" if m['Pct'] > 0 else "red"
-            m_html += f"<tr><td style='font-weight:bold;'>{m['Stock']}</td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
+            link = get_tv_link(m['Stock'], market_mode)
+            m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{m['Stock']}</a></td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
         m_html += "</table></div>"
         st.markdown(m_html, unsafe_allow_html=True)
     else: st.info("No significant movement found based on live data.")
@@ -662,7 +647,8 @@ elif page_selection == "🔥 9:20 AM: OI Setup":
     if oi_setups:
         oi_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Market Action (Signal)</th><th>OI / Vol Status</th></tr>"
         for o in oi_setups: 
-            oi_html += f"<tr><td style='font-weight:bold;'>{o['Stock']}</td><td style='color:{o['Color']}; font-weight:bold;'>{o['Signal']}</td><td style='color:#1a73e8; font-weight:bold;'>{o['OI']}</td></tr>"
+            link = get_tv_link(o['Stock'], market_mode)
+            oi_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{o['Stock']}</a></td><td style='color:{o['Color']}; font-weight:bold;'>{o['Signal']}</td><td style='color:#1a73e8; font-weight:bold;'>{o['OI']}</td></tr>"
         oi_html += "</table></div>"
         st.markdown(oi_html, unsafe_allow_html=True)
     else: st.info("No significant real volume/OI spikes detected.")
@@ -685,9 +671,11 @@ elif page_selection == "⚡ REAL TRADE (CoinDCX)":
             elif t_type == "limit_order" and t_price <= 0: st.error("Limit orders require a valid price.")
             else:
                 with st.spinner("Placing order on CoinDCX..."):
-                    # Dummy function print for safety. Make sure real function is active
-                    st.info("Place order feature needs verified API keys.")
+                    response = place_coindcx_order(t_market, t_side, t_type, t_price, t_qty)
+                    if "error" in response: st.error(f"❌ Order Failed: {response['error']}")
+                    else: st.success(f"✅ Order Successfully Placed! Server Response: {response}")
     st.markdown("</div>", unsafe_allow_html=True)
+    st.warning("⚠️ WARNING: This panel executes REAL trades. Ensure 'DCX_KEY' and 'DCX_SECRET' are added securely in Streamlit Cloud Settings.")
 
 elif page_selection == "🧮 Futures Risk Calculator":
     st.markdown("<div class='section-title'>🧮 Crypto Futures Risk Calculator</div>", unsafe_allow_html=True)
@@ -766,8 +754,9 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Real TradingView Charts Restored (BSE fix for India) \n\n ✅ Clean Yahoo Finance Engine is Active \n\n ✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Manual Trade Logging Restored")
+    st.success("✅ Clickable TradingView Chart Links Active \n\n ✅ Clean Yahoo Finance Engine is Active \n\n ✅ Auto-Save Database is Active (`trade_history.csv`)")
 
-if auto_refresh:
+# 🚨 Stable Auto-Refresh Execution 🚨
+if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
     st.rerun()
