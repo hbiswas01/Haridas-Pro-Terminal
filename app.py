@@ -76,8 +76,8 @@ def fmt_price(val):
         else: return f"{val:,.2f}"
     except: return "0.00"
 
-# --- 3. HELPER FUNCTIONS (Optimized for latest tick) ---
-@st.cache_data(ttl=15)
+# --- 3. HELPER FUNCTIONS ---
+@st.cache_data(ttl=30)
 def get_live_data(ticker_symbol):
     if "-USD" in ticker_symbol:
         try:
@@ -238,25 +238,12 @@ def nse_ha_bb_strategy_5m(stock_list, market_sentiment="BULLISH"):
         except: continue
     return signals
 
-def get_crypto_klines(symbol, interval="1h", limit=50):
-    try:
-        url = f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}"
-        res = requests.get(url, timeout=5).json()
-        df = pd.DataFrame(res, columns=['Datetime', 'Open', 'High', 'Low', 'Close', 'Volume', 'Close time', 'Quote asset volume', 'Number of trades', 'Taker buy base asset volume', 'Taker buy quote asset volume', 'Ignore'])
-        df['Open'], df['High'], df['Low'], df['Close'] = df['Open'].astype(float), df['High'].astype(float), df['Low'].astype(float), df['Close'].astype(float)
-        # Convert timestamp to human readable
-        tz = pytz.timezone('Asia/Kolkata')
-        df['Datetime'] = pd.to_datetime(df['Datetime'], unit='ms').dt.tz_localize('UTC').dt.tz_convert(tz)
-        return df
-    except: return pd.DataFrame()
-
 @st.cache_data(ttl=60)
 def crypto_ha_bb_strategy(crypto_list):
     signals = []
     def scan_coin(coin):
         try:
-            symbol = coin.replace("-USD", "USDT")
-            df = get_crypto_klines(symbol, interval="1h", limit=50)
+            df = yf.Ticker(coin).history(period="15d", interval="1h") 
             if df.empty or len(df) < 25: return None
             
             df['SMA_20'] = df['Close'].rolling(window=20).mean()
@@ -287,11 +274,10 @@ def crypto_ha_bb_strategy(crypto_list):
             if signal:
                 risk = abs(entry - sl)
                 if risk > 0:
-                    dt_time = alert_candle['Datetime'].strftime('%H:%M')
                     return {
                         "Stock": coin, "Signal": signal, "Entry": float(entry), "LTP": float(current_ltp),
                         "SL": float(sl), "Target(BB)": float(target_bb), "T2(1:3)": float(entry - (risk*3) if signal=="SHORT" else entry + (risk*3)),
-                        "Time": dt_time
+                        "Time": alert_candle.name.strftime('%d %b, %H:%M')
                     }
         except: return None
         return None
@@ -575,7 +561,7 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("⏳ No fresh signals right now.")
 
-        # 🚨 NEW: 100% NATIVE PLOTLY CHART (BYPASSES TRADINGVIEW RESTRICTIONS) 🚨
+        # 🚨 FIX: NATIVE PLOTLY CHARTS (100% WORKING & GAP-FREE) 🚨
         st.markdown("<div class='section-title'>📈 QUICK CHART VIEWER</div>", unsafe_allow_html=True)
         tv_asset = st.selectbox("Select Asset to view live chart:", sorted(all_assets))
         
@@ -588,17 +574,30 @@ if page_selection == "📈 MAIN TERMINAL":
                         if 'Datetime' in df_chart.columns:
                             df_chart['Time'] = pd.to_datetime(df_chart['Datetime']).dt.tz_convert('Asia/Kolkata')
                 else:
-                    symbol = tv_asset.replace("-USD", "USDT")
-                    df_chart = get_crypto_klines(symbol, interval="1h", limit=100)
+                    df_chart = yf.Ticker(tv_asset).history(period="15d", interval="1h")
                     if not df_chart.empty:
-                        df_chart['Time'] = df_chart['Datetime']
+                        df_chart = df_chart.reset_index()
+                        if 'Datetime' in df_chart.columns:
+                            df_chart['Time'] = pd.to_datetime(df_chart['Datetime']).dt.tz_convert('Asia/Kolkata')
 
                 if not df_chart.empty:
                     fig = go.Figure(data=[go.Candlestick(x=df_chart['Time'],
                                     open=df_chart['Open'], high=df_chart['High'],
-                                    low=df_chart['Low'], close=df_chart['Close'])])
+                                    low=df_chart['Low'], close=df_chart['Close'],
+                                    increasing_line_color='#26a69a', increasing_fillcolor='#26a69a',
+                                    decreasing_line_color='#ef5350', decreasing_fillcolor='#ef5350')])
+                    
+                    # 🚨 FIX: HIDE WEEKENDS AND NON-TRADING HOURS FOR INDIAN STOCKS 🚨
+                    if market_mode == "🇮🇳 Indian Market (NSE)":
+                        fig.update_xaxes(
+                            rangebreaks=[
+                                dict(bounds=["15:30", "09:15"]), 
+                                dict(bounds=["sat", "mon"])      
+                            ]
+                        )
+                    
                     fig.update_layout(
-                        margin=dict(l=0, r=0, t=20, b=0),
+                        margin=dict(l=0, r=0, t=30, b=0),
                         height=400,
                         xaxis_rangeslider_visible=False,
                         template="plotly_white",
@@ -611,7 +610,7 @@ if page_selection == "📈 MAIN TERMINAL":
             except Exception as e:
                 st.error("Error loading chart data.")
 
-        # 🚨 FIX: MARKET SEGREGATION FOR TRADES 🚨
+        # 🚨 FIX: STRICT MARKET SEGREGATION FOR TRADES 🚨
         display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
         display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
 
@@ -781,7 +780,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Native Plotly Charts Active (Bypasses TradingView restrictions) \n\n ✅ Clean Yahoo Finance Engine is Active \n\n ✅ Auto-Save Database is Active (`trade_history.csv`) \n\n ✅ Focused Market Scanner is Active")
+    st.success("✅ Gap-Free Native Plotly Charts Active \n\n ✅ Unblocked Yahoo Finance Engine Active \n\n ✅ Strict Market Segregation Applied")
 
 if auto_refresh:
     time.sleep(refresh_time * 60)
