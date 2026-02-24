@@ -82,7 +82,7 @@ def get_tv_link(ticker, market_mode):
         sym = "BINANCE:" + ticker.replace("-USD", "USDT")
     return f"https://in.tradingview.com/chart/?symbol={sym}"
 
-# 🚨 THE NEW DIRECT COINDCX API ENGINE (FIXES CRYPTO CRASH) 🚨
+# 🚨 100% PERFECTED DATA ENGINE FOR EXACT MATCH 🚨
 @st.cache_data(ttl=15)
 def get_coindcx_data():
     try:
@@ -109,14 +109,29 @@ def get_live_data(ticker_symbol, is_crypto=False):
         return 0.0, 0.0, 0.0
     else:
         try:
+            # The bulletproof 'info' dictionary method for Indian Stocks
             stock = yf.Ticker(ticker_symbol)
-            fast = stock.fast_info
-            ltp = float(fast.last_price)
-            prev_close = float(fast.previous_close)
-            if prev_close > 0 and ltp > 0:
+            info = stock.info
+            
+            ltp = info.get('currentPrice') or info.get('regularMarketPrice')
+            prev_close = info.get('previousClose') or info.get('regularMarketPreviousClose')
+            
+            if ltp and prev_close and prev_close > 0:
+                ltp = float(ltp)
+                prev_close = float(prev_close)
                 change = ltp - prev_close
                 pct_change = (change / prev_close) * 100
                 return ltp, change, pct_change
+            
+            # Absolute fallback
+            df = stock.history(period="5d", interval="1d")
+            if len(df) >= 2:
+                prev_close = float(df['Close'].iloc[-2])
+                ltp = float(df['Close'].iloc[-1])
+                change = ltp - prev_close
+                pct_change = (change / prev_close) * 100
+                return ltp, change, pct_change
+                
             return 0.0, 0.0, 0.0
         except: return 0.0, 0.0, 0.0
 
@@ -185,7 +200,6 @@ def get_dynamic_market_data(item_list, is_crypto=False):
             
     return sorted(gainers, key=lambda x: x['Pct'], reverse=True)[:5], sorted(losers, key=lambda x: x['Pct'])[:5], trends
 
-# 🚨 SIGNAL ENGINES (RESPECTS MARKET SENTIMENT) 🚨
 @st.cache_data(ttl=60)
 def nse_ha_bb_strategy_5m(stock_list, sentiment="BOTH"):
     signals = []
@@ -330,17 +344,16 @@ def process_auto_trades(live_signals, is_crypto_mode):
         save_data(st.session_state.active_trades, ACTIVE_TRADES_FILE)
         save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
 
-# 🚨 FIXED PRE-MARKET VS OPENING MOVERS LOGIC 🚨
+# 🚨 BULLETPROOF PRE-MARKET & OPENING MOVERS LOGIC 🚨
 @st.cache_data(ttl=60)
 def get_pre_market_gap(stock_list):
     movers = []
     for ticker in stock_list:
         try:
-            stock = yf.Ticker(ticker)
-            fast = stock.fast_info
-            prev_close = float(fast.previous_close)
-            today_open = float(fast.open)
-            if prev_close > 0 and today_open > 0:
+            info = yf.Ticker(ticker).info
+            prev_close = info.get('previousClose')
+            today_open = info.get('open')
+            if prev_close and today_open and prev_close > 0:
                 gap_pct = ((today_open - prev_close) / prev_close) * 100
                 if abs(gap_pct) >= 1.0: 
                     movers.append({"Stock": ticker, "Gap %": gap_pct, "Open": today_open})
@@ -352,18 +365,34 @@ def get_opening_movers(stock_list):
     movers = []
     for ticker in stock_list:
         try:
-            stock = yf.Ticker(ticker)
-            fast = stock.fast_info
-            today_open = float(fast.open)
-            ltp = float(fast.last_price)
-            if today_open > 0 and ltp > 0:
+            info = yf.Ticker(ticker).info
+            today_open = info.get('open')
+            ltp = info.get('currentPrice') or info.get('regularMarketPrice')
+            if today_open and ltp and today_open > 0:
                 move_pct = ((ltp - today_open) / today_open) * 100
                 if abs(move_pct) >= 1.5: 
                     movers.append({"Stock": ticker, "Move %": move_pct, "LTP": ltp})
         except: pass
     return sorted(movers, key=lambda x: abs(x['Move %']), reverse=True)
 
-# 🚨 LIVE COINDCX FUTURES LIST ENGINE 🚨
+@st.cache_data(ttl=60)
+def get_oi_simulation(item_list):
+    setups = []
+    for ticker in item_list:
+        try:
+            df = yf.Ticker(ticker).history(period="2d", interval="15m")
+            if len(df) >= 3:
+                c1, v1 = df['Close'].iloc[-1], df['Volume'].iloc[-1]
+                c2, v2 = df['Close'].iloc[-2], df['Volume'].iloc[-2]
+                c3 = df['Close'].iloc[-3]
+                if v1 > (v2 * 1.5):
+                    oi_status = "🔥 High (Spike)"
+                    if c1 > c2: signal, color = "Short Covering 🚀", "green"
+                    else: signal, color = "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉", "red"
+                    setups.append({"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color})
+        except: pass
+    return setups
+
 @st.cache_data(ttl=15)
 def get_all_crypto_futures():
     try:
@@ -404,7 +433,7 @@ css_string = (
     ".stApp { background-color: #f0f4f8; font-family: 'Segoe UI', sans-serif; } "
     ".block-container { padding-top: 3rem !important; padding-bottom: 1rem !important; padding-left: 1rem !important; padding-right: 1rem !important; } "
     ".top-nav { background-color: #002b36; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #00ffd0; border-radius: 8px; margin-bottom: 10px; box-shadow: 0px 4px 10px rgba(0,0,0,0.2); } "
-    ".section-title { background: linear-gradient(90deg, #002b36 0%, #00425a 100%); color: #00ffd0; font-size: 13px; font-weight: 800; padding: 10px 15px; text-transform: uppercase; border-left: 5px solid #00ffd0; border-radius: 5px; margin-top: 15px; margin-bottom: 10px; box-shadow: 0px 3px 6px rgba(0,0,0,0.15); letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;} "
+    ".section-title { background: linear-gradient(90deg, #002b36 0%, #00425a 100%); color: #00ffd0; font-size: 13px; font-weight: 800; padding: 10px 15px; text-transform: uppercase; border-left: 5px solid #00ffd0; border-radius: 5px; margin-top: 15px; margin-bottom: 10px; box-shadow: 0px 3px 6px rgba(0,0,0,0.15); letter-spacing: 0.5px; display: flex; align-items: center; } "
     ".table-container { overflow-x: auto; width: 100%; border-radius: 5px; } "
     ".v38-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 11px; color: black; background: white; border: 1px solid #b0c4de; margin-bottom: 10px; white-space: nowrap; } "
     ".v38-table th { background-color: #4f81bd; color: white; padding: 8px; border: 1px solid #b0c4de; font-weight: bold; } "
@@ -439,7 +468,6 @@ with st.sidebar:
     
     is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
     
-    # 🚨 FIX: MISSING VARIABLES RESTORED 🚨
     if not is_crypto_mode:
         menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
         sector_dict = FNO_SECTORS
@@ -453,7 +481,6 @@ with st.sidebar:
     page_selection = st.radio("Select Menu:", menu_options)
     st.divider()
     
-    # 🚨 CUSTOM WATCHLIST MANAGER 🚨
     st.markdown("### 📋 CUSTOM WATCHLIST")
     new_asset = st.text_input("Add Stock/Coin (e.g. ITC.NS / PEPE-USD):").upper().strip()
     if st.button("➕ Add Asset") and new_asset:
@@ -512,7 +539,6 @@ else:
     terminal_title = "HARIDAS CRYPTO TERMINAL"
     session, session_color = "LIVE 24/7 (CRYPTO)", "#17a2b8"
 
-# 🚨 MAIN SCREEN REFRESH BUTTON 🚨
 st.markdown(f"""
 <div class='top-nav'>
     <div style='color:#00ffd0; font-weight:900; font-size:22px; letter-spacing:2px; text-transform:uppercase; text-shadow: 0px 0px 10px rgba(0, 255, 208, 0.6);'>📊 {terminal_title}</div>
@@ -523,6 +549,7 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
+# 🚨 THE NEW WORKING REFRESH BUTTON 🚨
 col_ref1, col_ref2 = st.columns([8, 2])
 with col_ref2:
     if st.button("🔄 REFRESH LIVE DATA", type="primary", use_container_width=True):
@@ -730,6 +757,7 @@ if page_selection == "📈 MAIN TERMINAL":
                 pnl_pct = float(t.get('P&L %', 0))
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
+                
                 formatted_points = fmt_price(abs(points), is_crypto_mode)
                 
                 hist_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(entry_p, is_crypto_mode)}</td><td>{prefix}{fmt_price(exit_p, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='font-weight:bold;'>{t['Status']}</td><td>{t['Date']}</td></tr>"
