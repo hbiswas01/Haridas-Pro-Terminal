@@ -79,7 +79,7 @@ def fmt_price(val, is_crypto=False):
             elif abs(val) < 1: return f"{val:.4f}"
             else: return f"{val:,.2f}"
         else:
-            return f"{val:,.2f}" # Strictly 2 decimals for INR
+            return f"{val:,.2f}" 
     except: return "0.00"
 
 def get_tv_link(ticker, market_mode):
@@ -384,7 +384,7 @@ css_string = (
     ".bar-fg-green { background: #276a44; height: 100%; border-radius: 3px; } "
     ".bar-fg-red { background: #8b0000; height: 100%; border-radius: 3px; } "
     "details.sector-details { border: 1px solid #b0c4de; margin-bottom: 5px; background: white; border-radius: 4px; } "
-    "summary.sector-summary { padding: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background-color: #f4f6f9; font-size: 11px; } "
+    "summary.sector-summary { padding: 8px; font-weight: bold; cursor: pointer; display: flex; align-items: center; background-color: #f4f6f9; font-size: 11px; } "
     ".sector-content { padding: 8px; border-top: 1px solid #eee; display: flex; flex-wrap: wrap; gap: 5px; background: #fafafa; } "
     ".stock-chip { font-size: 10px; padding: 4px 6px; border-radius: 4px; border: 1px solid #ccc; background: #fff; text-decoration: none !important; font-weight: bold; box-shadow: 0px 1px 2px rgba(0,0,0,0.05);} "
     ".stock-chip:hover { border-color: #1a73e8; background: #e8f0fe; } "
@@ -472,17 +472,15 @@ if page_selection == "📈 MAIN TERMINAL":
 
     process_auto_trades(live_signals)
 
-    signal_stocks = [s['Stock'] for s in live_signals]
-    focused_scan_list = list(set(current_watchlist + signal_stocks))
+    # 🚨 FIX 1: SCAN THE ENTIRE MARKET FOR REAL TOP GAINERS/LOSERS 🚨
+    with st.spinner("Fetching Market Movers & Trends for Entire Market..."):
+        gainers, losers, trends = get_dynamic_market_data(all_assets)
 
-    with st.spinner("Fetching Market Movers & Trends for Watchlist..."):
-        gainers, losers, trends = get_dynamic_market_data(focused_scan_list)
+    # Trend continuity applies to important assets from whole market + active watchlist
+    important_assets = list(set([s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers] + current_watchlist))
+    filtered_trends = [t for t in trends if t['Stock'] in important_assets]
 
-    important_assets = [s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers]
-    # Ensure trends show for the selected watchlist even if not in "top 5" gainers/losers
-    filtered_trends = trends 
-
-    # 🚨 FIX 2: WIDER COLUMNS TO PREVENT SQUEEZING 🚨
+    # 🚨 FIX 2: WIDER COLUMNS TO PREVENT SQUEEZING TEXT 🚨
     col1, col2, col3 = st.columns([1.25, 2.5, 1.25])
 
     with col1:
@@ -495,12 +493,13 @@ if page_selection == "📈 MAIN TERMINAL":
                     c = "green" if s['Pct'] >= 0 else "red"
                     bc = "bar-fg-green" if s['Pct'] >= 0 else "bar-fg-red"
                     sign = "+" if s['Pct'] >= 0 else ""
+                    # 🚨 FIX: Wrap and Layout logic fixed so text doesn't break into new line 🚨
                     sec_html += f"""
                     <details class='sector-details'>
                         <summary class='sector-summary'>
-                            <div style='width:40%; color:#003366;'>📂 {s['Sector']}</div>
-                            <div style='width:20%; color:{c};'>{sign}{s['Pct']}%</div>
-                            <div style='width:30%; padding-top:2px;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></div>
+                            <div style='width: 45%; color:#003366; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>📂 {s['Sector']}</div>
+                            <div style='width: 25%; color:{c}; text-align: center;'>{sign}{s['Pct']}%</div>
+                            <div style='width: 30%;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></div>
                         </summary>
                         <div class='sector-content'>
                     """
@@ -555,7 +554,6 @@ if page_selection == "📈 MAIN TERMINAL":
             sign = "+" if chg >= 0 else ""
             prefix = "₹" if name == "USDINR" else ("$" if is_crypto_mode else "")
             
-            # Smart decimal for indices
             if name == "USDINR": val_str, chg_str = f"{val:.4f}", f"{chg:.4f}"
             else: val_str, chg_str = fmt_price(val, is_crypto_mode), fmt_price(chg, is_crypto_mode)
             
@@ -645,8 +643,8 @@ if page_selection == "📈 MAIN TERMINAL":
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
                 
-                # 🚨 FIX 1: Smart Decimal explicitly applied to Live P&L points 🚨
-                formatted_points = fmt_price(points, is_crypto_mode)
+                # Smart Decimal ensures 2 zeros for INR, 4+ for Crypto
+                formatted_points = fmt_price(abs(points), is_crypto_mode)
                 
                 act_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'], is_crypto_mode)}</td><td>{prefix}{fmt_price(ltp, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='color:#856404;'>{prefix}{fmt_price(t['Target'], is_crypto_mode)}</td><td style='color:#dc3545;'>{prefix}{fmt_price(t['SL'], is_crypto_mode)}</td><td>{t['Date']}</td></tr>"
             act_html += "</table></div>"
@@ -656,7 +654,6 @@ if page_selection == "📈 MAIN TERMINAL":
 
         st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY (CLOSED TRADES)</div>", unsafe_allow_html=True)
         if len(display_history) > 0:
-            # 🚨 FIX 3: Shortened Table Header to "P&L (Pts)" 🚨
             hist_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>Exit</th><th>P&L (Pts)</th><th>Status</th><th>Time</th></tr>"
             for t in display_history:
                 link = get_tv_link(t['Stock'], market_mode)
@@ -671,8 +668,7 @@ if page_selection == "📈 MAIN TERMINAL":
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
                 
-                # 🚨 FIX 1: Smart Decimal explicitly applied to History points 🚨
-                formatted_points = fmt_price(points, is_crypto_mode)
+                formatted_points = fmt_price(abs(points), is_crypto_mode)
                 
                 hist_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(entry_p, is_crypto_mode)}</td><td>{prefix}{fmt_price(exit_p, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='font-weight:bold;'>{t['Status']}</td><td>{t['Date']}</td></tr>"
             hist_html += "</table></div>"
@@ -836,7 +832,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Smart Decimal Formatting (INR/Crypto) \n\n ✅ Wide Balaced Layout \n\n ✅ Compact Table Headers \n\n ✅ Background Stable Auto-Refresh Active")
+    st.success("✅ Smart Decimal Formatting (INR/Crypto) \n\n ✅ Wide Balanced Layout \n\n ✅ Compact Table Headers \n\n ✅ Background Stable Auto-Refresh Active")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
