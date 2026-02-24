@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 import pytz
 import yfinance as yf
@@ -77,7 +78,7 @@ def fmt_price(val):
         else: return f"{val:,.2f}"
     except: return "0.00"
 
-# 🚨 DYNAMIC CHART LINK GENERATOR 🚨
+# 🚨 UNIVERSAL LINK GENERATOR 🚨
 def get_tv_link(ticker, market_mode):
     if market_mode == "🇮🇳 Indian Market (NSE)":
         sym = "BSE:" + ticker.replace(".NS", "")
@@ -362,11 +363,12 @@ css_string = (
     ".v38-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 11px; color: black; background: white; border: 1px solid #b0c4de; margin-bottom: 10px; white-space: nowrap; } "
     ".v38-table th { background-color: #4f81bd; color: white; padding: 8px; border: 1px solid #b0c4de; font-weight: bold; } "
     ".v38-table td { padding: 8px; border: 1px solid #b0c4de; } "
-    ".v38-table a { text-decoration: none; cursor: pointer; } "
-    ".v38-table a:hover { text-decoration: underline; } "
+    ".v38-table a { text-decoration: none; cursor: pointer; color: #1a73e8 !important; } "
+    ".v38-table a:hover { text-decoration: underline; color: #d35400 !important; } "
     ".idx-container { display: flex; justify-content: space-between; background: white; border: 1px solid #b0c4de; padding: 5px; margin-bottom: 10px; flex-wrap: wrap; border-radius: 5px; } "
     ".idx-box { text-align: center; width: 31%; border-right: 1px solid #eee; padding: 5px; min-width: 100px; margin-bottom: 5px; } "
     ".idx-box:nth-child(3n) { border-right: none; } "
+    ".idx-box a:hover { text-decoration: underline; color: #d35400 !important; } "
     ".adv-dec-container { background: white; border: 1px solid #b0c4de; padding: 10px; margin-bottom: 10px; text-align: center; border-radius: 5px; } "
     ".adv-dec-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin: 8px 0; } "
     ".bar-green { background-color: #2e7d32; } .bar-red { background-color: #d32f2f; } "
@@ -403,7 +405,6 @@ with st.sidebar:
     current_watchlist = sector_dict[selected_sector]
     st.divider()
     
-    # 🚨 FIX: Stable Auto-Refresh Toggle 🚨
     st.markdown("### ⏱️ AUTO REFRESH")
     auto_refresh_toggle = st.checkbox("Enable Auto-Refresh", value=st.session_state.auto_ref)
     if auto_refresh_toggle != st.session_state.auto_ref:
@@ -480,18 +481,26 @@ if page_selection == "📈 MAIN TERMINAL":
                 sec_html += "</table></div>"
                 st.markdown(sec_html, unsafe_allow_html=True)
 
-        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (IMPORTANT LIST)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY</div>", unsafe_allow_html=True)
         if filtered_trends:
-            t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Status</th></tr>"
+            t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Status</th></tr>"
             for t in filtered_trends: 
                 link = get_tv_link(t['Stock'], market_mode)
-                t_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{t['Stock']}</a></td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
+                t_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='color:{t['Color']}; font-weight:bold;'>{t['Status']}</td></tr>"
             t_html += "</table></div>"
             st.markdown(t_html, unsafe_allow_html=True)
-        else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day continuous trend found in active list.</p>", unsafe_allow_html=True)
+        else: st.markdown("<p style='font-size:12px;text-align:center; color:#888;'>No 3-day trend found in active list.</p>", unsafe_allow_html=True)
 
     with col2:
         st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
+        
+        # 🚨 Indices with clickable TradingView Links 🚨
+        idx_tv_map = {
+            "Sensex": "BSE:SENSEX", "Nifty": "NSE:NIFTY", "USDINR": "FX_IDC:USDINR",
+            "Nifty Bank": "NSE:BANKNIFTY", "Fin Nifty": "NSE:FINNIFTY", "Nifty IT": "NSE:CNXIT",
+            "BITCOIN": "BINANCE:BTCUSDT", "ETHEREUM": "BINANCE:ETHUSDT", "SOLANA": "BINANCE:SOLUSDT",
+            "BINANCE COIN": "BINANCE:BNBUSDT", "RIPPLE": "BINANCE:XRPUSDT", "DOGECOIN": "BINANCE:DOGEUSDT"
+        }
         
         if market_mode == "🇮🇳 Indian Market (NSE)":
             p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN")
@@ -518,7 +527,9 @@ if page_selection == "📈 MAIN TERMINAL":
             if name == "USDINR": val_str, chg_str = f"{val:.4f}", f"{chg:.4f}"
             elif market_mode != "🇮🇳 Indian Market (NSE)": val_str, chg_str = fmt_price(val), fmt_price(chg)
             else: val_str, chg_str = f"{val:,.2f}", f"{chg:,.2f}"
-            indices_html += f"<div class='idx-box'><span style='font-size:11px; color:#555; font-weight:bold;'>{name}</span><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{chg_str} ({sign}{pct:.2f}%)</span></div>"
+            
+            idx_link = f"https://in.tradingview.com/chart/?symbol={idx_tv_map[name]}"
+            indices_html += f"<div class='idx-box'><a href='{idx_link}' target='_blank' style='text-decoration:none; font-size:11px; color:#1a73e8; font-weight:bold;'>{name} 🔗</a><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{chg_str} ({sign}{pct:.2f}%)</span></div>"
         indices_html += "</div>"
         st.markdown(indices_html, unsafe_allow_html=True)
 
@@ -547,13 +558,12 @@ if page_selection == "📈 MAIN TERMINAL":
             st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL COINDCX FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
 
         if len(live_signals) > 0:
-            sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset (Click 4 Chart)</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
+            sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
             for sig in live_signals:
                 sig_clr = "green" if sig['Signal'] == "BUY" else "red"
                 prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
                 link = get_tv_link(sig['Stock'], market_mode)
-                # 🚨 Clickable Ticker Name 🚨
-                sig_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank' style='color:{sig_clr};'>{sig['Stock']}</a></td><td>{prefix}{fmt_price(sig['Entry'])}</td><td>{prefix}{fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{prefix}{fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#856404;'>{prefix}{fmt_price(sig['T2(1:3)'])}</td><td>{sig['Time']}</td></tr>"
+                sig_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {sig['Stock']}</a></td><td>{prefix}{fmt_price(sig['Entry'])}</td><td>{prefix}{fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{prefix}{fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#856404;'>{prefix}{fmt_price(sig['T2(1:3)'])}</td><td>{sig['Time']}</td></tr>"
             sig_html += "</table></div>"
             st.markdown(sig_html, unsafe_allow_html=True)
         else:
@@ -584,43 +594,58 @@ if page_selection == "📈 MAIN TERMINAL":
         display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
         display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
 
+        # 🚨 ALL DATAFRAMES CONVERTED TO CLICKABLE HTML TABLES 🚨
         st.markdown("<div class='section-title'>⏳ ACTIVE TRADES (RUNNING AUTO-TRACKER)</div>", unsafe_allow_html=True)
         if len(display_active) > 0:
-            df_active = pd.DataFrame(display_active)
-            st.dataframe(df_active, use_container_width=True)
+            act_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>SL</th><th>Target</th><th>Status</th><th>Time</th></tr>"
+            for t in display_active:
+                link = get_tv_link(t['Stock'], market_mode)
+                prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
+                act_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'])}</td><td>{prefix}{fmt_price(t['SL'])}</td><td>{prefix}{fmt_price(t['Target'])}</td><td style='color:#d35400; font-weight:bold;'>{t['Status']}</td><td>{t['Date']}</td></tr>"
+            act_html += "</table></div>"
+            st.markdown(act_html, unsafe_allow_html=True)
         else:
             st.info("No trades are currently active for this market.")
 
         st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY (CLOSED TRADES)</div>", unsafe_allow_html=True)
         if len(display_history) > 0:
+            hist_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>Exit</th><th>P&L %</th><th>Status</th><th>Time</th></tr>"
+            for t in display_history:
+                link = get_tv_link(t['Stock'], market_mode)
+                prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
+                pnl = float(t['P&L %'])
+                pnl_color = "green" if pnl >= 0 else "red"
+                sign = "+" if pnl >= 0 else ""
+                hist_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'])}</td><td>{prefix}{fmt_price(t['Exit'])}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{pnl}%</td><td style='font-weight:bold;'>{t['Status']}</td><td>{t['Date']}</td></tr>"
+            hist_html += "</table></div>"
+            st.markdown(hist_html, unsafe_allow_html=True)
+            
+            # Keep Export Button
             df_history = pd.DataFrame(display_history)
-            df_display = df_history.copy()
-            df_display['Entry'] = df_display['Entry'].apply(lambda x: fmt_price(float(x)))
-            df_display['Exit'] = df_display['Exit'].apply(lambda x: fmt_price(float(x)))
-            df_display['P&L %'] = df_display['P&L %'].apply(lambda x: f"+{x}%" if float(x) >= 0 else f"{x}%")
-            st.dataframe(df_display, use_container_width=True)
+            csv_journal = df_history.to_csv(index=False).encode('utf-8')
+            st.download_button("📥 Export Journal to Excel", data=csv_journal, file_name=f"Haridas_Journal_{datetime.date.today()}.csv", mime="text/csv")
         else:
             st.info("No closed trades yet for this market.")
 
     with col3:
         st.markdown("<div class='section-title'>🚀 LIVE TOP GAINERS</div>", unsafe_allow_html=True)
         if gainers:
-            g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
+            g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>LTP</th><th>%</th></tr>"
             for g in gainers: 
                 prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
                 link = get_tv_link(g['Stock'], market_mode)
-                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
+                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
             g_html += "</table></div>"
             st.markdown(g_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
 
         st.markdown("<div class='section-title'>🔻 LIVE TOP LOSERS</div>", unsafe_allow_html=True)
         if losers:
-            l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>LTP</th><th>%</th></tr>"
+            l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>LTP</th><th>%</th></tr>"
             for l in losers: 
                 prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
                 link = get_tv_link(l['Stock'], market_mode)
-                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
+                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
             l_html += "</table></div>"
             st.markdown(l_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
@@ -631,11 +656,11 @@ elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening M
     with st.spinner("Scanning ALL Assets..."):
         movers = get_opening_movers(all_assets)
     if movers:
-        m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock</th><th>LTP</th><th>Movement %</th></tr>"
+        m_html = "<div class='table-container'><table class='v38-table'><tr><th>Stock 🔗</th><th>LTP</th><th>Movement %</th></tr>"
         for m in movers: 
             c = "green" if m['Pct'] > 0 else "red"
             link = get_tv_link(m['Stock'], market_mode)
-            m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{m['Stock']}</a></td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
+            m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {m['Stock']}</a></td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
         m_html += "</table></div>"
         st.markdown(m_html, unsafe_allow_html=True)
     else: st.info("No significant movement found based on live data.")
@@ -645,10 +670,10 @@ elif page_selection == "🔥 9:20 AM: OI Setup":
     with st.spinner("Scanning for Volume Spikes & OI Proxy..."):
         oi_setups = get_oi_simulation(all_assets)
     if oi_setups:
-        oi_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset</th><th>Market Action (Signal)</th><th>OI / Vol Status</th></tr>"
+        oi_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Market Action (Signal)</th><th>OI / Vol Status</th></tr>"
         for o in oi_setups: 
             link = get_tv_link(o['Stock'], market_mode)
-            oi_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank' style='color:#003366;'>{o['Stock']}</a></td><td style='color:{o['Color']}; font-weight:bold;'>{o['Signal']}</td><td style='color:#1a73e8; font-weight:bold;'>{o['OI']}</td></tr>"
+            oi_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {o['Stock']}</a></td><td style='color:{o['Color']}; font-weight:bold;'>{o['Signal']}</td><td style='color:#1a73e8; font-weight:bold;'>{o['OI']}</td></tr>"
         oi_html += "</table></div>"
         st.markdown(oi_html, unsafe_allow_html=True)
     else: st.info("No significant real volume/OI spikes detected.")
@@ -675,7 +700,6 @@ elif page_selection == "⚡ REAL TRADE (CoinDCX)":
                     if "error" in response: st.error(f"❌ Order Failed: {response['error']}")
                     else: st.success(f"✅ Order Successfully Placed! Server Response: {response}")
     st.markdown("</div>", unsafe_allow_html=True)
-    st.warning("⚠️ WARNING: This panel executes REAL trades. Ensure 'DCX_KEY' and 'DCX_SECRET' are added securely in Streamlit Cloud Settings.")
 
 elif page_selection == "🧮 Futures Risk Calculator":
     st.markdown("<div class='section-title'>🧮 Crypto Futures Risk Calculator</div>", unsafe_allow_html=True)
@@ -741,7 +765,8 @@ elif page_selection == "📊 Backtest Engine":
 
                     bt_df = pd.DataFrame(trades)
                     if not bt_df.empty:
-                        st.success(f"✅ Backtest completed for {bt_stock}. Found {len(bt_df)} setups.")
+                        link = get_tv_link(bt_stock, market_mode)
+                        st.markdown(f"### <a href='{link}' target='_blank' style='text-decoration:none; color:#1a73e8;'>✅ Click to Open Chart for {bt_stock} 🔗</a>", unsafe_allow_html=True)
                         total_pnl = bt_df['P&L %'].sum()
                         win_rate = (len(bt_df[bt_df['P&L %'] > 0]) / len(bt_df)) * 100
                         m_col1, m_col2, m_col3 = st.columns(3)
@@ -754,9 +779,9 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Clickable TradingView Chart Links Active \n\n ✅ Clean Yahoo Finance Engine is Active \n\n ✅ Auto-Save Database is Active (`trade_history.csv`)")
+    st.success("✅ Universal Clickable Links Active \n\n ✅ Background Stable Auto-Refresh Active \n\n ✅ Clean Dashboard UI Applied")
 
-# 🚨 Stable Auto-Refresh Execution 🚨
+# 🚨 BACKEND STABLE REFRESH EXECUTION 🚨
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
     st.rerun()
