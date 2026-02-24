@@ -36,7 +36,6 @@ if 'trade_history' not in st.session_state:
 if 'auto_ref' not in st.session_state:
     st.session_state.auto_ref = False
 
-# 🚨 NEW: CUSTOM WATCHLIST SESSION STATE 🚨
 if 'custom_watch_in' not in st.session_state:
     st.session_state.custom_watch_in = []
 if 'custom_watch_cr' not in st.session_state:
@@ -83,16 +82,31 @@ def get_tv_link(ticker, market_mode):
         sym = "BINANCE:" + ticker.replace("-USD", "USDT")
     return f"https://in.tradingview.com/chart/?symbol={sym}"
 
-# --- 3. HELPER FUNCTIONS ---
+# 🚨 THE NEW DIRECT COINDCX API ENGINE (NEVER BLOCKED) 🚨
 @st.cache_data(ttl=15)
-def get_live_data(ticker_symbol):
-    if "-USD" in ticker_symbol:
-        try:
-            symbol = ticker_symbol.replace("-USD", "USDT")
-            url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={symbol}"
-            res = requests.get(url, timeout=2).json()
-            return float(res['lastPrice']), float(res['priceChange']), float(res['priceChangePercent'])
-        except: return 0.0, 0.0, 0.0
+def get_coindcx_data():
+    try:
+        res = requests.get("https://api.coindcx.com/exchange/ticker", timeout=5).json()
+        ticker_dict = {}
+        for item in res:
+            market = item['market']
+            if market.startswith('B-') and market.endswith('_USDT'):
+                base = market.replace('B-', '').replace('_USDT', '')
+                ticker_dict[f"{base}-USD"] = {
+                    "last_price": float(item.get('last_price', 0)),
+                    "change_pct": float(item.get('change_24_hour', 0))
+                }
+        return ticker_dict
+    except:
+        return {}
+
+@st.cache_data(ttl=15)
+def get_live_data(ticker_symbol, is_crypto=False):
+    if is_crypto:
+        dcx_data = get_coindcx_data()
+        if ticker_symbol in dcx_data:
+            return dcx_data[ticker_symbol]['last_price'], 0.0, dcx_data[ticker_symbol]['change_pct']
+        return 0.0, 0.0, 0.0
     else:
         try:
             stock = yf.Ticker(ticker_symbol)
@@ -101,7 +115,6 @@ def get_live_data(ticker_symbol):
                 prev_close = float(df_daily['Close'].iloc[-2])
                 try: ltp = float(stock.fast_info.last_price)
                 except: ltp = float(df_daily['Close'].iloc[-1])
-                
                 if prev_close > 0 and ltp > 0:
                     change = ltp - prev_close
                     pct_change = (change / prev_close) * 100
@@ -110,14 +123,14 @@ def get_live_data(ticker_symbol):
         except: return 0.0, 0.0, 0.0
 
 @st.cache_data(ttl=60)
-def get_real_sector_performance(sector_dict, ignore_keys=[]):
+def get_real_sector_performance(sector_dict, ignore_keys=[], is_crypto=False):
     results = []
     for sector, items in sector_dict.items():
         if sector in ignore_keys: continue
         total_pct, valid = 0, 0
         stock_details = []
         for ticker in items:
-            ltp, _, pct = get_live_data(ticker)
+            ltp, _, pct = get_live_data(ticker, is_crypto)
             if ltp > 0: 
                 total_pct += pct
                 valid += 1
@@ -129,9 +142,9 @@ def get_real_sector_performance(sector_dict, ignore_keys=[]):
     return sorted(results, key=lambda x: x['Pct'], reverse=True)
 
 @st.cache_data(ttl=60)
-def get_adv_dec(item_list):
+def get_adv_dec(item_list, is_crypto=False):
     adv, dec = 0, 0
-    def fetch_chg(ticker): return get_live_data(ticker)[1]
+    def fetch_chg(ticker): return get_live_data(ticker, is_crypto)[1] if not is_crypto else get_live_data(ticker, True)[2]
     with ThreadPoolExecutor(max_workers=30) as executor:
         results = list(executor.map(fetch_chg, item_list))
     for change in results:
@@ -140,23 +153,23 @@ def get_adv_dec(item_list):
     return adv, dec
 
 @st.cache_data(ttl=120)
-def get_dynamic_market_data(item_list):
+def get_dynamic_market_data(item_list, is_crypto=False):
     gainers, losers, trends = [], [], []
     def fetch_data(ticker):
         try:
-            ltp, chg, pct_chg = get_live_data(ticker)
+            ltp, chg, pct_chg = get_live_data(ticker, is_crypto)
             if ltp == 0.0: return None
             
-            stock = yf.Ticker(ticker)
-            df = stock.history(period="10d", interval="1d")
             status, color = None, None
-            
-            if len(df) >= 3:
-                c1 = ltp 
-                c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
-                o1, o2, o3 = float(df['Open'].iloc[-1]), float(df['Open'].iloc[-2]), float(df['Open'].iloc[-3])
-                if c1 > o1 and c2 > o2 and c3 > o3: status, color = "৩ দিন উত্থান", "green"
-                elif c1 < o1 and c2 < o2 and c3 < o3: status, color = "৩ দিন পতন", "red"
+            if not is_crypto:
+                stock = yf.Ticker(ticker)
+                df = stock.history(period="10d", interval="1d")
+                if len(df) >= 3:
+                    c1 = ltp 
+                    c2, c3 = float(df['Close'].iloc[-2]), float(df['Close'].iloc[-3])
+                    o1, o2, o3 = float(df['Open'].iloc[-1]), float(df['Open'].iloc[-2]), float(df['Open'].iloc[-3])
+                    if c1 > o1 and c2 > o2 and c3 > o3: status, color = "৩ দিন উত্থান", "green"
+                    elif c1 < o1 and c2 < o2 and c3 < o3: status, color = "৩ দিন পতন", "red"
                 
             obj = {"Stock": ticker, "LTP": ltp, "Pct": round(pct_chg, 2)}
             return (obj, status, color)
@@ -174,25 +187,6 @@ def get_dynamic_market_data(item_list):
             
     return sorted(gainers, key=lambda x: x['Pct'], reverse=True)[:5], sorted(losers, key=lambda x: x['Pct'])[:5], trends
 
-@st.cache_data(ttl=60)
-def get_oi_simulation(item_list):
-    setups = []
-    for ticker in item_list:
-        try:
-            df = yf.Ticker(ticker).history(period="2d", interval="15m")
-            if len(df) >= 3:
-                c1, v1 = df['Close'].iloc[-1], df['Volume'].iloc[-1]
-                c2, v2 = df['Close'].iloc[-2], df['Volume'].iloc[-2]
-                c3 = df['Close'].iloc[-3]
-                if v1 > (v2 * 1.5):
-                    oi_status = "🔥 High (Spike)"
-                    if c1 > c2: signal, color = "Short Covering 🚀", "green"
-                    else: signal, color = "Long Unwinding ⚠️" if c2 > c3 else "Short Buildup 📉", "red"
-                    setups.append({"Stock": ticker, "Signal": signal, "OI": oi_status, "Color": color})
-        except: pass
-    return setups
-
-# 🚨 SIGNAL ENGINES (RESPECTS MARKET SENTIMENT) 🚨
 @st.cache_data(ttl=60)
 def nse_ha_bb_strategy_5m(stock_list, sentiment="BOTH"):
     signals = []
@@ -289,7 +283,7 @@ def crypto_ha_bb_strategy(crypto_list, sentiment="BOTH"):
         if res is not None: signals.append(res)
     return signals
 
-def process_auto_trades(live_signals):
+def process_auto_trades(live_signals, is_crypto_mode):
     ist_timezone = pytz.timezone('Asia/Kolkata')
     current_time_str = datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M")
     active_stocks = [t['Stock'] for t in st.session_state.active_trades]
@@ -310,7 +304,7 @@ def process_auto_trades(live_signals):
 
     trades_to_remove = []
     for trade in st.session_state.active_trades:
-        ltp, _, _ = get_live_data(trade['Stock'])
+        ltp, _, _ = get_live_data(trade['Stock'], is_crypto_mode)
         if ltp == 0.0: continue
 
         close_reason = None
@@ -369,22 +363,21 @@ def get_opening_movers(stock_list):
         except: pass
     return sorted(movers, key=lambda x: abs(x['Move %']), reverse=True)
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=15)
 def get_all_crypto_futures():
     try:
-        url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
-        res = requests.get(url, timeout=5).json()
+        res = requests.get("https://api.coindcx.com/exchange/ticker", timeout=5).json()
         data = []
         for item in res:
-            if item['symbol'].endswith('USDT'):
-                coin_name = item['symbol'].replace('USDT', '-USD')
+            market = item['market']
+            if market.startswith('B-') and market.endswith('_USDT'):
+                base = market.replace('B-', '').replace('_USDT', '')
                 data.append({
-                    "Asset": coin_name,
-                    "LTP": float(item['lastPrice']),
-                    "Change %": float(item['priceChangePercent']),
-                    "Volume": float(item['quoteVolume'])
+                    "Asset": f"{base}-USD",
+                    "LTP": float(item.get('last_price', 0)),
+                    "Change %": float(item.get('change_24_hour', 0))
                 })
-        return pd.DataFrame(data)
+        return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
     except: return pd.DataFrame()
 
 def place_coindcx_order(market, side, order_type, price, quantity):
@@ -445,7 +438,7 @@ with st.sidebar:
     
     is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
     
-    # 🚨 FIX: MISSING VARIABLES RESTORED 🚨
+    # Define globally accessible lists based on mode to prevent NameError
     if not is_crypto_mode:
         menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
         sector_dict = FNO_SECTORS
@@ -455,7 +448,6 @@ with st.sidebar:
         sector_dict = CRYPTO_SECTORS
         all_assets = ALL_CRYPTO
     
-    # 🚨 INSTANT REFRESH BUTTON 🚨
     if st.button("🔄 REFRESH ALL DATA NOW", type="primary", use_container_width=True):
         st.cache_data.clear() 
         st.rerun()
@@ -465,7 +457,6 @@ with st.sidebar:
     page_selection = st.radio("Select Menu:", menu_options)
     st.divider()
     
-    # 🚨 CUSTOM WATCHLIST MANAGER 🚨
     st.markdown("### 📋 CUSTOM WATCHLIST")
     new_asset = st.text_input("Add Stock/Coin (e.g. ITC.NS / PEPE-USD):").upper().strip()
     if st.button("➕ Add Asset") and new_asset:
@@ -477,7 +468,6 @@ with st.sidebar:
         time.sleep(1)
         st.rerun()
 
-    # Dynamic Sector Dict mapping
     working_sectors = dict(sector_dict)
     custom_list = st.session_state.custom_watch_in if not is_crypto_mode else st.session_state.custom_watch_cr
     if custom_list:
@@ -545,10 +535,10 @@ if page_selection == "📈 MAIN TERMINAL":
         with st.spinner(f"Scanning 1H HA Charts (Sentiment: {user_sentiment})..."): 
             live_signals = crypto_ha_bb_strategy(current_watchlist, user_sentiment)
 
-    process_auto_trades(live_signals)
+    process_auto_trades(live_signals, is_crypto_mode)
 
     with st.spinner("Fetching Market Movers & Trends for Entire Market..."):
-        gainers, losers, trends = get_dynamic_market_data(all_assets)
+        gainers, losers, trends = get_dynamic_market_data(all_assets, is_crypto_mode)
 
     important_assets = list(set([s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers] + current_watchlist))
     filtered_trends = [t for t in trends if t['Stock'] in important_assets]
@@ -558,7 +548,7 @@ if page_selection == "📈 MAIN TERMINAL":
     with col1:
         if not is_crypto_mode:
             st.markdown("<div class='section-title'>📊 SECTOR PERFORMANCE</div>", unsafe_allow_html=True)
-            with st.spinner("Fetching Sectors..."): real_sectors = get_real_sector_performance(working_sectors)
+            with st.spinner("Fetching Sectors..."): real_sectors = get_real_sector_performance(working_sectors, ignore_keys=[], is_crypto=is_crypto_mode)
             if real_sectors:
                 sec_html = "<div>"
                 for s in real_sectors:
@@ -597,26 +587,26 @@ if page_selection == "📈 MAIN TERMINAL":
         st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
         idx_tv_map = {
             "Sensex": "BSE:SENSEX", "Nifty": "NSE:NIFTY", "USDINR": "FX_IDC:USDINR",
-            "Nifty Bank": "NSE:BANKNIFTY", "Fin Nifty": "NSE:FINNIFTY", "Nifty IT": "NSE:CNXIT",
+            "Nifty Bank": "NSE:BANKNIFTY", "Fin Nifty": "NSE:CNXFIN", "Nifty IT": "NSE:CNXIT",
             "BITCOIN": "BINANCE:BTCUSDT", "ETHEREUM": "BINANCE:ETHUSDT", "SOLANA": "BINANCE:SOLUSDT",
             "BINANCE COIN": "BINANCE:BNBUSDT", "RIPPLE": "BINANCE:XRPUSDT", "DOGECOIN": "BINANCE:DOGEUSDT"
         }
         
         if not is_crypto_mode:
-            p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN")
-            p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI")
-            p3_ltp, p3_chg, p3_pct = get_live_data("INR=X")
-            p4_ltp, p4_chg, p4_pct = get_live_data("^NSEBANK")
-            p5_ltp, p5_chg, p5_pct = get_live_data("NIFTY_FIN_SERVICE.NS") 
-            p6_ltp, p6_chg, p6_pct = get_live_data("^CNXIT") 
+            p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN", False)
+            p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI", False)
+            p3_ltp, p3_chg, p3_pct = get_live_data("INR=X", False)
+            p4_ltp, p4_chg, p4_pct = get_live_data("^NSEBANK", False)
+            p5_ltp, p5_chg, p5_pct = get_live_data("NIFTY_FIN_SERVICE.NS", False) 
+            p6_ltp, p6_chg, p6_pct = get_live_data("^CNXIT", False) 
             indices = [("Sensex", p1_ltp, p1_chg, p1_pct), ("Nifty", p2_ltp, p2_chg, p2_pct), ("USDINR", p3_ltp, p3_chg, p3_pct), ("Nifty Bank", p4_ltp, p4_chg, p4_pct), ("Fin Nifty", p5_ltp, p5_chg, p5_pct), ("Nifty IT", p6_ltp, p6_chg, p6_pct)]
         else:
-            p1_ltp, p1_chg, p1_pct = get_live_data("BTC-USD")
-            p2_ltp, p2_chg, p2_pct = get_live_data("ETH-USD")
-            p3_ltp, p3_chg, p3_pct = get_live_data("SOL-USD")
-            p4_ltp, p4_chg, p4_pct = get_live_data("BNB-USD")
-            p5_ltp, p5_chg, p5_pct = get_live_data("XRP-USD")
-            p6_ltp, p6_chg, p6_pct = get_live_data("DOGE-USD")
+            p1_ltp, p1_chg, p1_pct = get_live_data("BTC-USD", True)
+            p2_ltp, p2_chg, p2_pct = get_live_data("ETH-USD", True)
+            p3_ltp, p3_chg, p3_pct = get_live_data("SOL-USD", True)
+            p4_ltp, p4_chg, p4_pct = get_live_data("BNB-USD", True)
+            p5_ltp, p5_chg, p5_pct = get_live_data("XRP-USD", True)
+            p6_ltp, p6_chg, p6_pct = get_live_data("DOGE-USD", True)
             indices = [("BITCOIN", p1_ltp, p1_chg, p1_pct), ("ETHEREUM", p2_ltp, p2_chg, p2_pct), ("SOLANA", p3_ltp, p3_chg, p3_pct), ("BINANCE COIN", p4_ltp, p4_chg, p4_pct), ("RIPPLE", p5_ltp, p5_chg, p5_pct), ("DOGECOIN", p6_ltp, p6_chg, p6_pct)]
 
         indices_html = "<div class='idx-container'>"
@@ -634,7 +624,7 @@ if page_selection == "📈 MAIN TERMINAL":
         st.markdown(indices_html, unsafe_allow_html=True)
 
         with st.spinner("Calculating Breadth..."):
-            adv, dec = get_adv_dec(all_assets)
+            adv, dec = get_adv_dec(all_assets, is_crypto_mode)
         total_adv_dec = adv + dec
         adv_pct = (adv / total_adv_dec) * 100 if total_adv_dec > 0 else 50
         adv_title = "ADVANCE/ DECLINE (NSE)" if not is_crypto_mode else "ADVANCE/ DECLINE (CRYPTO)"
@@ -652,7 +642,10 @@ if page_selection == "📈 MAIN TERMINAL":
         )
         st.markdown(adv_dec_html, unsafe_allow_html=True)
 
-        st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector}</div>", unsafe_allow_html=True)
+        if not is_crypto_mode:
+            st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector} (5M HA+BB)</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL COINDCX FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
 
         if len(live_signals) > 0:
             sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
@@ -698,7 +691,7 @@ if page_selection == "📈 MAIN TERMINAL":
                 link = get_tv_link(t['Stock'], market_mode)
                 prefix = "₹" if not is_crypto_mode else "$"
                 
-                ltp, _, _ = get_live_data(t['Stock'])
+                ltp, _, _ = get_live_data(t['Stock'], is_crypto_mode)
                 if ltp == 0: ltp = t['Entry'] 
                 
                 if t['Signal'] == 'BUY':
@@ -710,7 +703,6 @@ if page_selection == "📈 MAIN TERMINAL":
                     
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
-                
                 formatted_points = fmt_price(abs(points), is_crypto_mode)
                 
                 act_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'], is_crypto_mode)}</td><td>{prefix}{fmt_price(ltp, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='color:#856404;'>{prefix}{fmt_price(t['Target'], is_crypto_mode)}</td><td style='color:#dc3545;'>{prefix}{fmt_price(t['SL'], is_crypto_mode)}</td><td>{t['Date']}</td></tr>"
@@ -776,17 +768,17 @@ elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening M
     with st.spinner("Scanning Entire Market..."):
         if page_selection == "🌅 9:10 AM: Pre-Market Gap":
             movers = get_pre_market_gap(all_assets)
-            col_name = "Gap % (from Yesterday Close)"
+            col_name = "Gap % (vs Yesterday Close)"
         else:
             movers = get_opening_movers(all_assets)
-            col_name = "Move % (from Today Open)"
+            col_name = "Move % (vs Today Open)"
             
     if movers:
         m_html = f"<div class='table-container'><table class='v38-table'><tr><th>Stock 🔗</th><th>Data Point</th><th>{col_name}</th></tr>"
         for m in movers: 
             pct = m.get('Gap %', m.get('Move %', 0))
-            c = "green" if pct > 0 else "red"
             val = m.get('Open', m.get('LTP', 0))
+            c = "green" if pct > 0 else "red"
             link = get_tv_link(m['Stock'], market_mode)
             m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {m['Stock']}</a></td><td>{fmt_price(val, is_crypto_mode)}</td><td style='color:{c}; font-weight:bold;'>{pct:.2f}%</td></tr>"
         m_html += "</table></div>"
@@ -808,9 +800,9 @@ elif page_selection == "🔥 9:20 AM: OI Setup":
 
 # ==================== CRYPTO MENUS ====================
 elif page_selection == "⚡ REAL TRADE (CoinDCX)":
-    st.markdown("<div class='section-title'>⚡ 200+ COINDCX FUTURES MARKETS (LIVE)</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>⚡ 200+ COINDCX FUTURES MARKETS (LIVE DATA)</div>", unsafe_allow_html=True)
     
-    with st.spinner("Fetching 200+ Live Futures from Binance Liquidity..."):
+    with st.spinner("Fetching 200+ Live Futures directly from CoinDCX/Binance..."):
         df_f = get_all_crypto_futures()
         
     if not df_f.empty:
@@ -920,7 +912,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Deep History Sync Engine Active (100% Angel One Match) \n\n ✅ Full UI Restored \n\n ✅ Background Stable Auto-Refresh Active")
+    st.success("✅ REAL 200+ CoinDCX Futures Engine Added \n\n ✅ Custom Watchlist & Market Sentiment Active \n\n ✅ Full UI and CSS Restored \n\n ✅ Instant Master Refresh Active")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
