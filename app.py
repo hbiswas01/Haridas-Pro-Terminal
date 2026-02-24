@@ -69,13 +69,17 @@ CRYPTO_SECTORS = {
 }
 ALL_CRYPTO = list(set([coin for clist in CRYPTO_SECTORS.values() for coin in clist]))
 
-def fmt_price(val):
+# 🚨 SMART DECIMAL FIX FOR INR & CRYPTO 🚨
+def fmt_price(val, is_crypto=False):
     try:
         val = float(val)
         if pd.isna(val) or val == 0: return "0.00"
-        if abs(val) < 0.01: return f"{val:.6f}"
-        elif abs(val) < 1: return f"{val:.4f}"
-        else: return f"{val:,.2f}"
+        if is_crypto:
+            if abs(val) < 0.01: return f"{val:.6f}"
+            elif abs(val) < 1: return f"{val:.4f}"
+            else: return f"{val:,.2f}"
+        else:
+            return f"{val:,.2f}" # Strictly 2 decimals for INR
     except: return "0.00"
 
 def get_tv_link(ticker, market_mode):
@@ -339,6 +343,22 @@ def get_opening_movers(stock_list):
             movers.append({"Stock": ticker, "LTP": ltp, "Pct": pct})
     return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
 
+def place_coindcx_order(market, side, order_type, price, quantity):
+    try:
+        key = st.secrets["DCX_KEY"]
+        secret = st.secrets["DCX_SECRET"]
+    except: return {"error": "API Keys not found in Streamlit Secrets."}
+    secret_bytes = bytes(secret, 'utf-8')
+    timestamp = int(round(time.time() * 1000))
+    dcx_market = f"B-{market.replace('-USD', '_USDT')}"
+    body = {"side": side.lower(), "order_type": order_type, "market": dcx_market, "price_per_unit": price, "total_quantity": quantity, "timestamp": timestamp}
+    json_body = json.dumps(body, separators=(',', ':'))
+    signature = hmac.new(secret_bytes, json_body.encode(), hashlib.sha256).hexdigest()
+    url = "https://api.coindcx.com/exchange/v1/orders/create"
+    headers = {'X-AUTH-APIKEY': key, 'X-AUTH-SIGNATURE': signature, 'Content-Type': 'application/json'}
+    try: return requests.post(url, data=json_body, headers=headers).json()
+    except Exception as e: return {"error": str(e)}
+
 # --- 4. CSS ---
 css_string = (
     "<style>"
@@ -358,7 +378,7 @@ css_string = (
     ".idx-box:nth-child(3n) { border-right: none; } "
     ".idx-box a:hover { text-decoration: underline; color: #d35400 !important; } "
     ".adv-dec-container { background: white; border: 1px solid #b0c4de; padding: 10px; margin-bottom: 10px; text-align: center; border-radius: 5px; } "
-    ".adv-dec-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin: 8px 0; } "
+    ".adv-dec-bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; margin: 8px 0; border: 1px solid #ccc; } "
     ".bar-green { background-color: #2e7d32; } .bar-red { background-color: #d32f2f; } "
     ".bar-bg { background: #e0e0e0; width: 100%; height: 14px; min-width: 50px; border-radius: 3px; } "
     ".bar-fg-green { background: #276a44; height: 100%; border-radius: 3px; } "
@@ -379,8 +399,10 @@ with st.sidebar:
     market_mode = st.radio("Toggle Global Market:", ["🇮🇳 Indian Market (NSE)", "₿ Crypto Market (24/7)"], index=0)
     st.divider()
     
+    is_crypto_mode = (market_mode != "🇮🇳 Indian Market (NSE)")
+    
     st.markdown("### 🎛️ HARIDAS DASHBOARD")
-    if market_mode == "🇮🇳 Indian Market (NSE)":
+    if not is_crypto_mode:
         menu_options = ["📈 MAIN TERMINAL", "🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening Movers", "🔥 9:20 AM: OI Setup", "📊 Backtest Engine", "⚙️ Scanner Settings"]
         sector_dict = FNO_SECTORS
         all_assets = ALL_STOCKS
@@ -421,7 +443,7 @@ curr_time = datetime.datetime.now(ist_timezone)
 t_915 = curr_time.replace(hour=9, minute=15, second=0, microsecond=0)
 t_1530 = curr_time.replace(hour=15, minute=30, second=0, microsecond=0)
 
-if market_mode == "🇮🇳 Indian Market (NSE)":
+if not is_crypto_mode:
     terminal_title = "HARIDAS NSE TERMINAL"
     if curr_time < t_915: session, session_color = "PRE-MARKET", "#ff9800" 
     elif curr_time <= t_1530: session, session_color = "LIVE MARKET", "#28a745" 
@@ -443,7 +465,7 @@ st.markdown(nav_html, unsafe_allow_html=True)
 # ==================== MAIN TERMINAL ====================
 if page_selection == "📈 MAIN TERMINAL":
     
-    if market_mode == "🇮🇳 Indian Market (NSE)":
+    if not is_crypto_mode:
         with st.spinner("Scanning 5m HA Charts..."): live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
     else:
         with st.spinner("Scanning ALL CoinDCX Futures..."): live_signals = crypto_ha_bb_strategy(CRYPTO_SECTORS["ALL COINDCX FUTURES"])
@@ -457,12 +479,14 @@ if page_selection == "📈 MAIN TERMINAL":
         gainers, losers, trends = get_dynamic_market_data(focused_scan_list)
 
     important_assets = [s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers]
-    filtered_trends = [t for t in trends if t['Stock'] in important_assets]
+    # Ensure trends show for the selected watchlist even if not in "top 5" gainers/losers
+    filtered_trends = trends 
 
-    col1, col2, col3 = st.columns([1, 2.8, 1])
+    # 🚨 FIX 2: WIDER COLUMNS TO PREVENT SQUEEZING 🚨
+    col1, col2, col3 = st.columns([1.25, 2.5, 1.25])
 
     with col1:
-        if market_mode == "🇮🇳 Indian Market (NSE)":
+        if not is_crypto_mode:
             st.markdown("<div class='section-title'>📊 SECTOR PERFORMANCE</div>", unsafe_allow_html=True)
             with st.spinner("Fetching Sectors..."): real_sectors = get_real_sector_performance(sector_dict)
             if real_sectors:
@@ -489,7 +513,7 @@ if page_selection == "📈 MAIN TERMINAL":
                 sec_html += "</div>"
                 st.markdown(sec_html, unsafe_allow_html=True)
 
-        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY (IMPORTANT LIST)</div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>🔍 TREND CONTINUITY</div>", unsafe_allow_html=True)
         if filtered_trends:
             t_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Status</th></tr>"
             for t in filtered_trends: 
@@ -508,7 +532,7 @@ if page_selection == "📈 MAIN TERMINAL":
             "BINANCE COIN": "BINANCE:BNBUSDT", "RIPPLE": "BINANCE:XRPUSDT", "DOGECOIN": "BINANCE:DOGEUSDT"
         }
         
-        if market_mode == "🇮🇳 Indian Market (NSE)":
+        if not is_crypto_mode:
             p1_ltp, p1_chg, p1_pct = get_live_data("^BSESN")
             p2_ltp, p2_chg, p2_pct = get_live_data("^NSEI")
             p3_ltp, p3_chg, p3_pct = get_live_data("INR=X")
@@ -529,10 +553,11 @@ if page_selection == "📈 MAIN TERMINAL":
         for name, val, chg, pct in indices:
             clr = "green" if chg >= 0 else "red"
             sign = "+" if chg >= 0 else ""
-            prefix = "₹" if name == "USDINR" else ("$" if market_mode != "🇮🇳 Indian Market (NSE)" else "")
+            prefix = "₹" if name == "USDINR" else ("$" if is_crypto_mode else "")
+            
+            # Smart decimal for indices
             if name == "USDINR": val_str, chg_str = f"{val:.4f}", f"{chg:.4f}"
-            elif market_mode != "🇮🇳 Indian Market (NSE)": val_str, chg_str = fmt_price(val), fmt_price(chg)
-            else: val_str, chg_str = f"{val:,.2f}", f"{chg:,.2f}"
+            else: val_str, chg_str = fmt_price(val, is_crypto_mode), fmt_price(chg, is_crypto_mode)
             
             idx_link = f"https://in.tradingview.com/chart/?symbol={idx_tv_map[name]}"
             indices_html += f"<div class='idx-box'><a href='{idx_link}' target='_blank' style='text-decoration:none; font-size:11px; color:#1a73e8; font-weight:bold;'>{name} 🔗</a><br><span style='font-size:15px; color:black; font-weight:bold;'>{prefix}{val_str}</span><br><span style='color:{clr}; font-size:11px; font-weight:bold;'>{sign}{chg_str} ({sign}{pct:.2f}%)</span></div>"
@@ -543,7 +568,7 @@ if page_selection == "📈 MAIN TERMINAL":
             adv, dec = get_adv_dec(all_assets)
         total_adv_dec = adv + dec
         adv_pct = (adv / total_adv_dec) * 100 if total_adv_dec > 0 else 50
-        adv_title = "Advance/ Decline (NSE)" if market_mode == "🇮🇳 Indian Market (NSE)" else "Advance/ Decline (CoinDCX Futures)"
+        adv_title = "ADVANCE/ DECLINE (NSE)" if not is_crypto_mode else "ADVANCE/ DECLINE (CRYPTO)"
         
         st.markdown(f"<div class='section-title'>📊 {adv_title}</div>", unsafe_allow_html=True)
         adv_dec_html = (
@@ -558,7 +583,7 @@ if page_selection == "📈 MAIN TERMINAL":
         )
         st.markdown(adv_dec_html, unsafe_allow_html=True)
 
-        if market_mode == "🇮🇳 Indian Market (NSE)":
+        if not is_crypto_mode:
             st.markdown(f"<div class='section-title'>🎯 LIVE SIGNALS FOR: {selected_sector} (5M HA+BB)</div>", unsafe_allow_html=True)
         else:
             st.markdown("<div class='section-title'>🎯 LIVE SIGNALS (ALL COINDCX FUTURES - 1H HA+BB)</div>", unsafe_allow_html=True)
@@ -567,9 +592,9 @@ if page_selection == "📈 MAIN TERMINAL":
             sig_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Entry</th><th>LTP</th><th>Signal</th><th>SL</th><th>Target (1:3)</th><th>Time</th></tr>"
             for sig in live_signals:
                 sig_clr = "green" if sig['Signal'] == "BUY" else "red"
-                prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
+                prefix = "₹" if not is_crypto_mode else "$"
                 link = get_tv_link(sig['Stock'], market_mode)
-                sig_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {sig['Stock']}</a></td><td>{prefix}{fmt_price(sig['Entry'])}</td><td>{prefix}{fmt_price(sig['LTP'])}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{prefix}{fmt_price(sig['SL'])}</td><td style='font-weight:bold; color:#856404;'>{prefix}{fmt_price(sig['T2(1:3)'])}</td><td>{sig['Time']}</td></tr>"
+                sig_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {sig['Stock']}</a></td><td>{prefix}{fmt_price(sig['Entry'], is_crypto_mode)}</td><td>{prefix}{fmt_price(sig['LTP'], is_crypto_mode)}</td><td style='color:white; background:{sig_clr}; font-weight:bold;'>{sig['Signal']}</td><td>{prefix}{fmt_price(sig['SL'], is_crypto_mode)}</td><td style='font-weight:bold; color:#856404;'>{prefix}{fmt_price(sig['T2(1:3)'], is_crypto_mode)}</td><td>{sig['Time']}</td></tr>"
             sig_html += "</table></div>"
             st.markdown(sig_html, unsafe_allow_html=True)
         else:
@@ -592,23 +617,21 @@ if page_selection == "📈 MAIN TERMINAL":
                         st.session_state.trade_history.append({
                             "Date": datetime.datetime.now(ist_timezone).strftime("%Y-%m-%d %H:%M"),
                             "Stock": j_asset.upper(), "Signal": j_signal, "Entry": j_entry, "Exit": j_exit,
-                            "Status": "MANUAL ENTRY", "P&L %": round(pnl_pct, 2), "Points": round(points, 4)
+                            "Status": "MANUAL ENTRY", "P&L %": round(pnl_pct, 2), "Points": points
                         })
                         save_data(st.session_state.trade_history, HISTORY_TRADES_FILE)
                         st.success("✅ Trade saved!")
 
-        display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
-        display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
+        display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if not is_crypto_mode else "-USD" in t['Stock'])]
+        display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if not is_crypto_mode else "-USD" in t['Stock'])]
 
-        # 🚨 FIX: LIVE P&L POINTS & PERCENTAGE IN ACTIVE TRADES 🚨
         st.markdown("<div class='section-title'>⏳ ACTIVE TRADES (RUNNING AUTO-TRACKER)</div>", unsafe_allow_html=True)
         if len(display_active) > 0:
             act_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>Live LTP</th><th>Live P&L</th><th>Target</th><th>SL</th><th>Time</th></tr>"
             for t in display_active:
                 link = get_tv_link(t['Stock'], market_mode)
-                prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
+                prefix = "₹" if not is_crypto_mode else "$"
                 
-                # Fetch live price for P&L calc
                 ltp, _, _ = get_live_data(t['Stock'])
                 if ltp == 0: ltp = t['Entry'] 
                 
@@ -622,19 +645,22 @@ if page_selection == "📈 MAIN TERMINAL":
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
                 
-                act_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'])}</td><td>{prefix}{fmt_price(ltp)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{fmt_price(points)} ({sign}{pnl_pct:.2f}%)</td><td style='color:#856404;'>{prefix}{fmt_price(t['Target'])}</td><td style='color:#dc3545;'>{prefix}{fmt_price(t['SL'])}</td><td>{t['Date']}</td></tr>"
+                # 🚨 FIX 1: Smart Decimal explicitly applied to Live P&L points 🚨
+                formatted_points = fmt_price(points, is_crypto_mode)
+                
+                act_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(t['Entry'], is_crypto_mode)}</td><td>{prefix}{fmt_price(ltp, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='color:#856404;'>{prefix}{fmt_price(t['Target'], is_crypto_mode)}</td><td style='color:#dc3545;'>{prefix}{fmt_price(t['SL'], is_crypto_mode)}</td><td>{t['Date']}</td></tr>"
             act_html += "</table></div>"
             st.markdown(act_html, unsafe_allow_html=True)
         else:
             st.info("No trades are currently active for this market.")
 
-        # 🚨 FIX: ABSOLUTE P&L POINTS & PERCENTAGE IN HISTORY 🚨
         st.markdown("<div class='section-title'>📚 AUTO TRADE HISTORY (CLOSED TRADES)</div>", unsafe_allow_html=True)
         if len(display_history) > 0:
-            hist_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>Exit</th><th>P&L Amount (Per Share)</th><th>Status</th><th>Time</th></tr>"
+            # 🚨 FIX 3: Shortened Table Header to "P&L (Pts)" 🚨
+            hist_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>Exit</th><th>P&L (Pts)</th><th>Status</th><th>Time</th></tr>"
             for t in display_history:
                 link = get_tv_link(t['Stock'], market_mode)
-                prefix = "₹" if market_mode == "🇮🇳 Indian Market (NSE)" else "$"
+                prefix = "₹" if not is_crypto_mode else "$"
                 
                 entry_p = float(t['Entry'])
                 exit_p = float(t['Exit'])
@@ -645,7 +671,10 @@ if page_selection == "📈 MAIN TERMINAL":
                 pnl_color = "green" if points >= 0 else "red"
                 sign = "+" if points >= 0 else ""
                 
-                hist_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(entry_p)}</td><td>{prefix}{fmt_price(exit_p)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{fmt_price(points)} ({sign}{pnl_pct:.2f}%)</td><td style='font-weight:bold;'>{t['Status']}</td><td>{t['Date']}</td></tr>"
+                # 🚨 FIX 1: Smart Decimal explicitly applied to History points 🚨
+                formatted_points = fmt_price(points, is_crypto_mode)
+                
+                hist_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {t['Stock']}</a></td><td style='font-weight:bold;'>{t['Signal']}</td><td>{prefix}{fmt_price(entry_p, is_crypto_mode)}</td><td>{prefix}{fmt_price(exit_p, is_crypto_mode)}</td><td style='color:{pnl_color}; font-weight:bold;'>{sign}{prefix}{formatted_points} ({sign}{pnl_pct:.2f}%)</td><td style='font-weight:bold;'>{t['Status']}</td><td>{t['Date']}</td></tr>"
             hist_html += "</table></div>"
             st.markdown(hist_html, unsafe_allow_html=True)
             
@@ -660,9 +689,9 @@ if page_selection == "📈 MAIN TERMINAL":
         if gainers:
             g_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>LTP</th><th>%</th></tr>"
             for g in gainers: 
-                prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
+                prefix = "$" if is_crypto_mode else "₹"
                 link = get_tv_link(g['Stock'], market_mode)
-                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'])}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
+                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'], is_crypto_mode)}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
             g_html += "</table></div>"
             st.markdown(g_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
@@ -671,9 +700,9 @@ if page_selection == "📈 MAIN TERMINAL":
         if losers:
             l_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>LTP</th><th>%</th></tr>"
             for l in losers: 
-                prefix = "$" if market_mode != "🇮🇳 Indian Market (NSE)" else "₹"
+                prefix = "$" if is_crypto_mode else "₹"
                 link = get_tv_link(l['Stock'], market_mode)
-                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'])}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
+                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'], is_crypto_mode)}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
             l_html += "</table></div>"
             st.markdown(l_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
@@ -688,7 +717,7 @@ elif page_selection in ["🌅 9:10 AM: Pre-Market Gap", "🚀 9:15 AM: Opening M
         for m in movers: 
             c = "green" if m['Pct'] > 0 else "red"
             link = get_tv_link(m['Stock'], market_mode)
-            m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {m['Stock']}</a></td><td>{fmt_price(m['LTP'])}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
+            m_html += f"<tr><td style='font-weight:bold;'><a href='{link}' target='_blank'>🔸 {m['Stock']}</a></td><td>{fmt_price(m['LTP'], is_crypto_mode)}</td><td style='color:{c}; font-weight:bold;'>{m['Pct']}%</td></tr>"
         m_html += "</table></div>"
         st.markdown(m_html, unsafe_allow_html=True)
     else: st.info("No significant movement found based on live data.")
@@ -724,8 +753,9 @@ elif page_selection == "⚡ REAL TRADE (CoinDCX)":
             elif t_type == "limit_order" and t_price <= 0: st.error("Limit orders require a valid price.")
             else:
                 with st.spinner("Placing order on CoinDCX..."):
-                    # dummy execution logic removed, placeholder for actual API response printing
-                    st.info("Ensure actual API keys are valid for execution.")
+                    response = place_coindcx_order(t_market, t_side, t_type, t_price, t_qty)
+                    if "error" in response: st.error(f"❌ Order Failed: {response['error']}")
+                    else: st.success(f"✅ Order Successfully Placed! Server Response: {response}")
     st.markdown("</div>", unsafe_allow_html=True)
 
 elif page_selection == "🧮 Futures Risk Calculator":
@@ -753,8 +783,8 @@ elif page_selection == "🧮 Futures Risk Calculator":
                 margin_required = pos_size_usdt / leverage
                 liq_price = entry_price * (1 - (1/leverage)) if trade_type == "LONG (Buy)" else entry_price * (1 + (1/leverage))
                 st.success(f"**Margin Needed:** ${margin_required:.2f}")
-                st.info(f"**Position Size:** {fmt_price(pos_size_coin)} Coins (${pos_size_usdt:.2f})")
-                st.error(f"**Liquidation Price ⚠️:** ${fmt_price(liq_price)}")
+                st.info(f"**Position Size:** {fmt_price(pos_size_coin, True)} Coins (${pos_size_usdt:.2f})")
+                st.error(f"**Liquidation Price ⚠️:** ${fmt_price(liq_price, True)}")
             else: st.warning("Entry and Stop Loss cannot be the same!")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -782,13 +812,13 @@ elif page_selection == "📊 Backtest Engine":
                             entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
                             if entry_price > 0:
                                 pnl = ((entry_price - exit_price) / entry_price) * 100
-                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days GREEN", "Signal": "SHORT", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
+                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days GREEN", "Signal": "SHORT", "Entry": fmt_price(entry_price, is_crypto_mode), "Exit": fmt_price(exit_price, is_crypto_mode), "P&L %": round(pnl, 2)})
                         
                         elif c1 < o1 and c2 < o2 and c3 < o3:
                             entry_price, exit_price = bt_data['Open'].iloc[i], bt_data['Close'].iloc[i]
                             if entry_price > 0:
                                 pnl = ((exit_price - entry_price) / entry_price) * 100
-                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days RED", "Signal": "BUY", "Entry": fmt_price(entry_price), "Exit": fmt_price(exit_price), "P&L %": round(pnl, 2)})
+                                trades.append({"Date": bt_data.index[i].strftime('%Y-%m-%d'), "Setup": "3 Days RED", "Signal": "BUY", "Entry": fmt_price(entry_price, is_crypto_mode), "Exit": fmt_price(exit_price, is_crypto_mode), "P&L %": round(pnl, 2)})
 
                     bt_df = pd.DataFrame(trades)
                     if not bt_df.empty:
@@ -806,7 +836,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Real-Time P&L Amount Tracking Active \n\n ✅ Universal Clickable Links Active \n\n ✅ Background Stable Auto-Refresh Active")
+    st.success("✅ Smart Decimal Formatting (INR/Crypto) \n\n ✅ Wide Balaced Layout \n\n ✅ Compact Table Headers \n\n ✅ Background Stable Auto-Refresh Active")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
