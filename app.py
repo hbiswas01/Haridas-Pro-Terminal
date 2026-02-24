@@ -90,7 +90,7 @@ def get_tv_link(ticker, market_mode):
         sym = "BINANCE:" + ticker.replace("-USD", "USDT")
         return f"https://in.tradingview.com/chart/?symbol={sym}"
 
-# 🚨 RENAMED ENGINES TO BUST STREAMLIT CACHE 🚨
+# --- 3. HELPER FUNCTIONS ---
 @st.cache_data(ttl=15, show_spinner=False)
 def fetch_coindcx_api():
     try:
@@ -107,7 +107,6 @@ def fetch_coindcx_api():
         return ticker_dict
     except: return {}
 
-# 🚨 3-LAYER SAFETY NET (GUARANTEES NO TYPE-ERROR) 🚨
 @st.cache_data(ttl=15, show_spinner=False)
 def fetch_live_data(ticker_symbol, is_crypto=False):
     try:
@@ -141,8 +140,38 @@ def fetch_live_data(ticker_symbol, is_crypto=False):
                         return (float(ltp), float(change), float(pct_change))
                 return (0.0, 0.0, 0.0)
             except: return (0.0, 0.0, 0.0)
-    except Exception as e:
-        return (0.0, 0.0, 0.0)
+    except: return (0.0, 0.0, 0.0)
+
+@st.cache_data(ttl=15, show_spinner=False)
+def fetch_all_crypto():
+    try:
+        res = requests.get("https://api.coindcx.com/exchange/ticker", timeout=5).json()
+        data = []
+        for item in res:
+            market = item.get('market', '')
+            if market.startswith('B-') and market.endswith('_USDT'):
+                base = market.replace('B-', '').replace('_USDT', '')
+                data.append({
+                    "Asset": f"{base}-USD",
+                    "LTP": float(item.get('last_price', 0)),
+                    "Change %": float(item.get('change_24_hour', 0))
+                })
+        if data: return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
+    except: pass
+    
+    try:
+        url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
+        res = requests.get(url, timeout=5).json()
+        data = []
+        for item in res:
+            if item['symbol'].endswith('USDT'):
+                data.append({
+                    "Asset": item['symbol'].replace('USDT', '-USD'),
+                    "LTP": float(item['lastPrice']),
+                    "Change %": float(item['priceChangePercent'])
+                })
+        if data: return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
+    except: return pd.DataFrame()
 
 @st.cache_data(ttl=60, show_spinner=False)
 def calc_sector_perf(sector_dict, ignore_keys=[], is_crypto=False):
@@ -428,37 +457,6 @@ def scan_oi_setup(item_list):
         if r: setups.append(r)
     return setups
 
-@st.cache_data(ttl=15, show_spinner=False)
-def fetch_all_crypto():
-    try:
-        res = requests.get("https://api.coindcx.com/exchange/ticker", timeout=5).json()
-        data = []
-        for item in res:
-            market = item.get('market', '')
-            if market.startswith('B-') and market.endswith('_USDT'):
-                base = market.replace('B-', '').replace('_USDT', '')
-                data.append({
-                    "Asset": f"{base}-USD",
-                    "LTP": float(item.get('last_price', 0)),
-                    "Change %": float(item.get('change_24_hour', 0))
-                })
-        if data: return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
-    except: pass
-    
-    try:
-        url = "https://fapi.binance.com/fapi/v1/ticker/24hr"
-        res = requests.get(url, timeout=5).json()
-        data = []
-        for item in res:
-            if item['symbol'].endswith('USDT'):
-                data.append({
-                    "Asset": item['symbol'].replace('USDT', '-USD'),
-                    "LTP": float(item['lastPrice']),
-                    "Change %": float(item['priceChangePercent'])
-                })
-        return pd.DataFrame(data).sort_values(by="Change %", ascending=False)
-    except: return pd.DataFrame()
-
 def place_coindcx_order(market, side, order_type, price, quantity):
     try:
         key = st.secrets["DCX_KEY"]
@@ -609,15 +607,35 @@ if page_selection == "📈 MAIN TERMINAL":
     
     if not is_crypto_mode:
         with st.spinner(f"Scanning 5m HA Charts (Sentiment: {user_sentiment})..."): 
-            live_signals = run_nse_strategy(current_watchlist, user_sentiment)
+            live_signals = nse_ha_bb_strategy_5m(current_watchlist, user_sentiment)
     else:
         with st.spinner(f"Scanning 1H HA Charts (Sentiment: {user_sentiment})..."): 
-            live_signals = run_crypto_strategy(current_watchlist, user_sentiment)
+            live_signals = crypto_ha_bb_strategy(current_watchlist, user_sentiment)
 
     process_auto_trades(live_signals, is_crypto_mode)
 
     with st.spinner("Fetching Market Movers & Trends for Entire Market..."):
-        gainers, losers, trends = calc_dynamic_movers(all_assets, is_crypto_mode)
+        # 🚨 FULL 200+ CRYPTO SCAN LOGIC FOR GAINERS/LOSERS/BREADTH 🚨
+        if is_crypto_mode:
+            df_all_crypto = fetch_all_crypto()
+            if not df_all_crypto.empty:
+                adv = int((df_all_crypto['Change %'] > 0).sum())
+                dec = int((df_all_crypto['Change %'] < 0).sum())
+                
+                df_renamed = df_all_crypto.rename(columns={'Asset': 'Stock', 'Change %': 'Pct'})
+                gainers = df_renamed[df_renamed['Pct'] > 0].head(5).to_dict('records')
+                # Sort ascending so the most negative (-25%) is at the top of losers
+                losers = df_renamed[df_renamed['Pct'] < 0].sort_values(by='Pct', ascending=True).head(5).to_dict('records')
+                
+                # Only scan specific list for 3-day trends to avoid 200+ heavy API calls
+                trend_scan_list = list(set([s['Stock'] for s in live_signals] + current_watchlist))
+                _, _, trends = calc_dynamic_movers(trend_scan_list, True)
+            else:
+                adv, dec = 0, 0
+                gainers, losers, trends = [], [], []
+        else:
+            adv, dec = calc_market_breadth(all_assets, False)
+            gainers, losers, trends = calc_dynamic_movers(all_assets, False)
 
     important_assets = list(set([s['Stock'] for s in live_signals] + [g['Stock'] for g in gainers] + [l['Stock'] for l in losers] + current_watchlist))
     filtered_trends = [t for t in trends if t['Stock'] in important_assets]
@@ -702,11 +720,9 @@ if page_selection == "📈 MAIN TERMINAL":
         indices_html += "</div>"
         st.markdown(indices_html, unsafe_allow_html=True)
 
-        with st.spinner("Calculating Breadth..."):
-            adv, dec = calc_market_breadth(all_assets, is_crypto_mode)
         total_adv_dec = adv + dec
         adv_pct = (adv / total_adv_dec) * 100 if total_adv_dec > 0 else 50
-        adv_title = "ADVANCE/ DECLINE (NSE)" if not is_crypto_mode else "ADVANCE/ DECLINE (CRYPTO)"
+        adv_title = "ADVANCE/ DECLINE (NSE)" if not is_crypto_mode else "ADVANCE/ DECLINE (CRYPTO 200+)"
         
         st.markdown(f"<div class='section-title'>📊 {adv_title}</div>", unsafe_allow_html=True)
         adv_dec_html = (
@@ -991,7 +1007,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ REAL CoinDCX Data Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
+    st.success("✅ REAL 200+ CoinDCX Data Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
