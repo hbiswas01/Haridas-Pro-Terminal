@@ -145,7 +145,14 @@ def fetch_live_data(ticker_symbol, is_crypto=False):
         if is_crypto:
             dcx_data = fetch_coindcx_api()
             if ticker_symbol in dcx_data:
-                return (float(dcx_data[ticker_symbol]['last_price']), 0.0, float(dcx_data[ticker_symbol]['change_pct']))
+                ltp = float(dcx_data[ticker_symbol]['last_price'])
+                pct = float(dcx_data[ticker_symbol]['change_pct'])
+                # 🚨 Fixed the +0.00 issue by reverse-calculating absolute price change 🚨
+                try:
+                    prev = ltp / (1 + (pct / 100))
+                    chg = ltp - prev
+                except: chg = 0.0
+                return (ltp, chg, pct)
             else:
                 try:
                     df = yf.Ticker(ticker_symbol).history(period="5d")
@@ -862,7 +869,8 @@ if page_selection == "📈 MAIN TERMINAL":
             for g in gainers: 
                 prefix = "$" if is_crypto_mode else "₹"
                 link = get_tv_link(g['Stock'], market_mode)
-                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'], is_crypto_mode)}</td><td style='color:green; font-weight:bold;'>+{g['Pct']}%</td></tr>"
+                # 🚨 FIXED DECIMAL FORMATTING HERE 🚨
+                g_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {g['Stock']}</a></td><td>{prefix}{fmt_price(g['LTP'], is_crypto_mode)}</td><td style='color:green; font-weight:bold;'>+{g['Pct']:.2f}%</td></tr>"
             g_html += "</table></div>"
             st.markdown(g_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live gainers data.</p>", unsafe_allow_html=True)
@@ -873,7 +881,8 @@ if page_selection == "📈 MAIN TERMINAL":
             for l in losers: 
                 prefix = "$" if is_crypto_mode else "₹"
                 link = get_tv_link(l['Stock'], market_mode)
-                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'], is_crypto_mode)}</td><td style='color:red; font-weight:bold;'>{l['Pct']}%</td></tr>"
+                # 🚨 FIXED DECIMAL FORMATTING HERE 🚨
+                l_html += f"<tr><td style='text-align:left; font-weight:bold;'><a href='{link}' target='_blank'>🔸 {l['Stock']}</a></td><td>{prefix}{fmt_price(l['LTP'], is_crypto_mode)}</td><td style='color:red; font-weight:bold;'>{l['Pct']:.2f}%</td></tr>"
             l_html += "</table></div>"
             st.markdown(l_html, unsafe_allow_html=True)
         else: st.markdown("<p style='font-size:12px;text-align:center;'>No live losers data.</p>", unsafe_allow_html=True)
@@ -1028,7 +1037,7 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ REAL 200+ CoinDCX Data Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ Manual Market Refresh Active \n\n ✅ Full Market UI & Trading View Links Restored")
+    st.success("✅ REAL 200+ CoinDCX Data Sync Active \n\n ✅ Double-Layer Crash Protection Enabled \n\n ✅ UI Decimals Formatting Fixed \n\n ✅ Full Market UI & Trading View Links Restored")
 
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
