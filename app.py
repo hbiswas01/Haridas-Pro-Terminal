@@ -78,7 +78,6 @@ def fmt_price(val):
         else: return f"{val:,.2f}"
     except: return "0.00"
 
-# 🚨 UNIVERSAL LINK GENERATOR 🚨
 def get_tv_link(ticker, market_mode):
     if market_mode == "🇮🇳 Indian Market (NSE)":
         sym = "BSE:" + ticker.replace(".NS", "")
@@ -111,18 +110,24 @@ def get_live_data(ticker_symbol):
         return 0.0, 0.0, 0.0
     except: return 0.0, 0.0, 0.0
 
+# 🚨 UPDATED SECTOR ENGINE (Now grabs individual stock data inside sectors) 🚨
 @st.cache_data(ttl=60)
 def get_real_sector_performance(sector_dict, ignore_keys=["MIXED WATCHLIST", "ALL COINDCX FUTURES"]):
     results = []
     for sector, items in sector_dict.items():
         if sector in ignore_keys: continue
         total_pct, valid = 0, 0
+        stock_details = []
         for ticker in items:
             _, _, pct = get_live_data(ticker)
-            if pct != 0.0: total_pct += pct; valid += 1
+            if pct != 0.0: 
+                total_pct += pct
+                valid += 1
+                stock_details.append({"Stock": ticker, "Pct": pct})
         if valid > 0:
             avg_pct = round(total_pct / valid, 2)
-            results.append({"Sector": sector, "Pct": avg_pct, "Width": max(min(abs(avg_pct) * 20, 100), 5)})
+            stock_details = sorted(stock_details, key=lambda x: x['Pct'], reverse=True)
+            results.append({"Sector": sector, "Pct": avg_pct, "Width": max(min(abs(avg_pct) * 20, 100), 5), "Stocks": stock_details})
     return sorted(results, key=lambda x: x['Pct'], reverse=True)
 
 @st.cache_data(ttl=60)
@@ -335,22 +340,6 @@ def get_opening_movers(stock_list):
             movers.append({"Stock": ticker, "LTP": ltp, "Pct": pct})
     return sorted(movers, key=lambda x: abs(x['Pct']), reverse=True)
 
-def place_coindcx_order(market, side, order_type, price, quantity):
-    try:
-        key = st.secrets["DCX_KEY"]
-        secret = st.secrets["DCX_SECRET"]
-    except: return {"error": "API Keys not found in Streamlit Secrets."}
-    secret_bytes = bytes(secret, 'utf-8')
-    timestamp = int(round(time.time() * 1000))
-    dcx_market = f"B-{market.replace('-USD', '_USDT')}"
-    body = {"side": side.lower(), "order_type": order_type, "market": dcx_market, "price_per_unit": price, "total_quantity": quantity, "timestamp": timestamp}
-    json_body = json.dumps(body, separators=(',', ':'))
-    signature = hmac.new(secret_bytes, json_body.encode(), hashlib.sha256).hexdigest()
-    url = "https://api.coindcx.com/exchange/v1/orders/create"
-    headers = {'X-AUTH-APIKEY': key, 'X-AUTH-SIGNATURE': signature, 'Content-Type': 'application/json'}
-    try: return requests.post(url, data=json_body, headers=headers).json()
-    except Exception as e: return {"error": str(e)}
-
 # --- 4. CSS ---
 css_string = (
     "<style>"
@@ -375,6 +364,11 @@ css_string = (
     ".bar-bg { background: #e0e0e0; width: 100%; height: 14px; min-width: 50px; border-radius: 3px; } "
     ".bar-fg-green { background: #276a44; height: 100%; border-radius: 3px; } "
     ".bar-fg-red { background: #8b0000; height: 100%; border-radius: 3px; } "
+    "details.sector-details { border: 1px solid #b0c4de; margin-bottom: 5px; background: white; border-radius: 4px; } "
+    "summary.sector-summary { padding: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background-color: #f4f6f9; font-size: 11px; } "
+    ".sector-content { padding: 8px; border-top: 1px solid #eee; display: flex; flex-wrap: wrap; gap: 5px; background: #fafafa; } "
+    ".stock-chip { font-size: 10px; padding: 4px 6px; border-radius: 4px; border: 1px solid #ccc; background: #fff; text-decoration: none !important; font-weight: bold; box-shadow: 0px 1px 2px rgba(0,0,0,0.05);} "
+    ".stock-chip:hover { border-color: #1a73e8; background: #e8f0fe; } "
     ".calc-box { background: white; border: 1px solid #00ffd0; padding: 15px; border-radius: 8px; box-shadow: 0px 2px 8px rgba(0,0,0,0.1); margin-top: 15px;} "
     "</style>"
 )
@@ -473,12 +467,30 @@ if page_selection == "📈 MAIN TERMINAL":
             st.markdown("<div class='section-title'>📊 SECTOR PERFORMANCE</div>", unsafe_allow_html=True)
             with st.spinner("Fetching Sectors..."): real_sectors = get_real_sector_performance(sector_dict)
             if real_sectors:
-                sec_html = "<div class='table-container'><table class='v38-table'><tr><th>Category</th><th>Avg %</th><th style='width:40%;'>Trend</th></tr>"
+                # 🚨 FIX: Expandable Accordion with Clickable Chips 🚨
+                sec_html = "<div>"
                 for s in real_sectors:
                     c = "green" if s['Pct'] >= 0 else "red"
                     bc = "bar-fg-green" if s['Pct'] >= 0 else "bar-fg-red"
-                    sec_html += f"<tr><td style='text-align:left; font-weight:bold; color:#003366;'>{s['Sector']}</td><td style='color:{c}; font-weight:bold;'>{s['Pct']}%</td><td style='padding:4px 8px;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></td></tr>"
-                sec_html += "</table></div>"
+                    sign = "+" if s['Pct'] >= 0 else ""
+                    
+                    sec_html += f"""
+                    <details class='sector-details'>
+                        <summary class='sector-summary'>
+                            <div style='width:40%; color:#003366;'>📂 {s['Sector']}</div>
+                            <div style='width:20%; color:{c};'>{sign}{s['Pct']}%</div>
+                            <div style='width:30%; padding-top:2px;'><div class='bar-bg'><div class='{bc}' style='width:{s['Width']}%;'></div></div></div>
+                        </summary>
+                        <div class='sector-content'>
+                    """
+                    for st_data in s['Stocks']:
+                        st_color = "green" if st_data['Pct'] >= 0 else "red"
+                        st_sign = "+" if st_data['Pct'] >= 0 else ""
+                        st_link = get_tv_link(st_data['Stock'], market_mode)
+                        sec_html += f"<a href='{st_link}' target='_blank' class='stock-chip' style='color:{st_color};'>{st_data['Stock']} ({st_sign}{st_data['Pct']:.2f}%)</a>"
+                        
+                    sec_html += "</div></details>"
+                sec_html += "</div>"
                 st.markdown(sec_html, unsafe_allow_html=True)
 
         st.markdown("<div class='section-title'>🔍 TREND CONTINUITY</div>", unsafe_allow_html=True)
@@ -494,7 +506,6 @@ if page_selection == "📈 MAIN TERMINAL":
     with col2:
         st.markdown("<div class='section-title'>📉 MARKET INDICES (LIVE)</div>", unsafe_allow_html=True)
         
-        # 🚨 Indices with clickable TradingView Links 🚨
         idx_tv_map = {
             "Sensex": "BSE:SENSEX", "Nifty": "NSE:NIFTY", "USDINR": "FX_IDC:USDINR",
             "Nifty Bank": "NSE:BANKNIFTY", "Fin Nifty": "NSE:FINNIFTY", "Nifty IT": "NSE:CNXIT",
@@ -569,7 +580,6 @@ if page_selection == "📈 MAIN TERMINAL":
         else:
             st.info("⏳ No fresh signals right now.")
 
-        # 🚨 Restored Manual Trade Form 🚨
         st.markdown("<div class='section-title'>📝 TRADE JOURNAL (MANUAL LOG)</div>", unsafe_allow_html=True)
         with st.expander("➕ Add New Trade to Journal"):
             with st.form("journal_form"):
@@ -594,7 +604,6 @@ if page_selection == "📈 MAIN TERMINAL":
         display_active = [t for t in st.session_state.active_trades if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
         display_history = [t for t in st.session_state.trade_history if (".NS" in t['Stock'] if market_mode == "🇮🇳 Indian Market (NSE)" else "-USD" in t['Stock'])]
 
-        # 🚨 ALL DATAFRAMES CONVERTED TO CLICKABLE HTML TABLES 🚨
         st.markdown("<div class='section-title'>⏳ ACTIVE TRADES (RUNNING AUTO-TRACKER)</div>", unsafe_allow_html=True)
         if len(display_active) > 0:
             act_html = "<div class='table-container'><table class='v38-table'><tr><th>Asset 🔗</th><th>Signal</th><th>Entry</th><th>SL</th><th>Target</th><th>Status</th><th>Time</th></tr>"
@@ -620,7 +629,6 @@ if page_selection == "📈 MAIN TERMINAL":
             hist_html += "</table></div>"
             st.markdown(hist_html, unsafe_allow_html=True)
             
-            # Keep Export Button
             df_history = pd.DataFrame(display_history)
             csv_journal = df_history.to_csv(index=False).encode('utf-8')
             st.download_button("📥 Export Journal to Excel", data=csv_journal, file_name=f"Haridas_Journal_{datetime.date.today()}.csv", mime="text/csv")
@@ -779,9 +787,8 @@ elif page_selection == "📊 Backtest Engine":
 
 elif page_selection == "⚙️ Scanner Settings":
     st.markdown("<div class='section-title'>⚙️ System Status</div>", unsafe_allow_html=True)
-    st.success("✅ Universal Clickable Links Active \n\n ✅ Background Stable Auto-Refresh Active \n\n ✅ Clean Dashboard UI Applied")
+    st.success("✅ Expandable Sector Folders Active \n\n ✅ Universal Clickable Links Active \n\n ✅ Background Stable Auto-Refresh Active")
 
-# 🚨 BACKEND STABLE REFRESH EXECUTION 🚨
 if st.session_state.auto_ref:
     time.sleep(refresh_time * 60)
     st.rerun()
